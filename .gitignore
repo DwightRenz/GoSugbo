@@ -1,0 +1,22 @@
+@"
+backend/target/
+backend/build/
+backend/*.jar
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+*.class
+backend/.env
+.env
+*.env
+**/application-*.properties
+**/application-*.yml
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.log
+logs/
+node_modules/
+"@ | Out-File -Encoding utf8 .gitignore
