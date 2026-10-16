@@ -1,5 +1,4 @@
-@"
-backend/target/
+﻿backend/target/
 backend/build/
 backend/*.jar
 backend/.mvn/
@@ -19,4 +18,3 @@ Thumbs.db
 *.log
 logs/
 node_modules/
-"@ | Out-File -Encoding utf8 .gitignore
