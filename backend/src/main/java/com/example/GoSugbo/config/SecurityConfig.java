@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -36,6 +37,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @EnableConfigurationProperties(JwtProperties.class)
 public class SecurityConfig {
 
@@ -48,13 +50,26 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // --- public auth endpoints
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
                                 "/api/auth/register/customer",
                                 "/api/auth/register/rider").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").hasRole("ADMIN")
+
+                        // --- public store/product browsing (GET only, no auth required)
+                        .requestMatchers(HttpMethod.GET, "/api/stores").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/stores/*").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/stores/*/hours").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/stores/*/products").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/products/*").permitAll()
+
+                        // --- swagger + error
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
+
+                        // --- everything else (including all /api/orders/** and /api/addresses/**)
+                        //     needs a valid token; @PreAuthorize on the controller decides the role.
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(handlers)
