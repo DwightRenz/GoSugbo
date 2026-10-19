@@ -176,6 +176,17 @@ public class OrderService {
         storeService.requireOwned(ownerId, order.getStoreId());
 
         OrderStatus next = OrderStatus.fromValue(newStatusValue);
+
+        // Rider-controlled statuses can't be set by the store owner.
+        if (next == OrderStatus.PICKED_UP || next == OrderStatus.IN_TRANSIT
+                || next == OrderStatus.DELIVERED) {
+            throw ApiException.conflict(
+                    "These statuses are set by the assigned rider through the delivery endpoints");
+        }
+        if (next == OrderStatus.CANCELLED && order.getRiderId() != null) {
+            throw ApiException.conflict("Cannot cancel an order that already has a rider");
+        }
+
         validateTransition(order.getStatus(), next);
 
         order.setStatus(next);
