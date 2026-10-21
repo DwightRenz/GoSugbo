@@ -24,6 +24,9 @@ public class DeliveryService {
             DeliveryStatus.ASSIGNED, DeliveryStatus.ACCEPTED, DeliveryStatus.ARRIVED_STORE,
             DeliveryStatus.PICKED_UP, DeliveryStatus.IN_TRANSIT, DeliveryStatus.ARRIVED_CUSTOMER);
 
+    private static final Set<RideStatus> ACTIVE_RIDES = EnumSet.of(
+            RideStatus.ACCEPTED, RideStatus.ARRIVED_PICKUP, RideStatus.IN_PROGRESS);
+
     private static final Map<DeliveryStatus, Set<DeliveryStatus>> TRANSITIONS = Map.of(
             DeliveryStatus.ASSIGNED,         Set.of(DeliveryStatus.ACCEPTED, DeliveryStatus.CANCELLED),
             DeliveryStatus.ACCEPTED,         Set.of(DeliveryStatus.ARRIVED_STORE, DeliveryStatus.CANCELLED),
@@ -44,6 +47,7 @@ public class DeliveryService {
     private final StoreRepository stores;
     private final AddressRepository addresses;
     private final StoreService storeService;
+    private final RideRepository rides;   // NEW - for mutual exclusion with rides
 
     // ------------------------------------------------------- available orders
 
@@ -87,6 +91,10 @@ public class DeliveryService {
         if (deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("You already have an active delivery");
         }
+        // NEW: a rider cannot take a delivery while on an active ride
+        if (rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
+            throw ApiException.conflict("You have an active ride; finish it before accepting deliveries");
+        }
 
         Order order = lockOrder(orderId);
         if (order.getStatus() != OrderStatus.READY_FOR_PICKUP || order.getRiderId() != null) {
@@ -110,6 +118,10 @@ public class DeliveryService {
         }
         if (deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("Rider already has an active delivery");
+        }
+        // NEW: same guard on admin assignment
+        if (rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
+            throw ApiException.conflict("Rider has an active ride; cannot assign a delivery");
         }
 
         Order order = lockOrder(orderId);
@@ -232,6 +244,10 @@ public class DeliveryService {
                 .orElseThrow(() -> ApiException.notFound("Rider profile not found"));
         if (!available && deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("Finish your active delivery before going offline");
+        }
+        // NEW: also block going offline while on an active ride
+        if (!available && rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
+            throw ApiException.conflict("Finish your active ride before going offline");
         }
         p.setAvailable(available);
         return RiderProfileResponse.from(riders.save(p));

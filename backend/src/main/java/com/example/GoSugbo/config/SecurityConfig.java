@@ -64,12 +64,16 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/stores/*/products").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/*").permitAll()
 
+                        // --- public ride pricing (browsing before login) -- NEW
+                        .requestMatchers(HttpMethod.GET, "/api/rides/types").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/rides/estimate").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/rides/nearby-riders").permitAll()
+
                         // --- swagger + error
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
 
-                        // --- everything else (including all /api/orders/** and /api/addresses/**)
-                        //     needs a valid token; @PreAuthorize on the controller decides the role.
+                        // --- everything else needs a valid token; @PreAuthorize decides role.
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(handlers)

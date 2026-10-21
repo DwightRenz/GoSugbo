@@ -21,8 +21,11 @@ public class Payment {
     @Column(name = "payment_id")
     private Integer paymentId;
 
-    @Column(name = "order_id", nullable = false, unique = true)
+    @Column(name = "order_id", unique = true)
     private Integer orderId;
+
+    @Column(name = "ride_id", unique = true)
+    private Integer rideId;
 
     @Convert(converter = PaymentMethod.DbConverter.class)
     @Column(nullable = false)
