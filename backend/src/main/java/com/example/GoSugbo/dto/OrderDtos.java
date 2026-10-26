@@ -155,4 +155,11 @@ public final class OrderDtos {
                     o.getPlacedAt(), o.getUpdatedAt());
         }
     }
+
+    // ------------------------------------------------------ NEW: PayMongo DTOs
+
+    @Schema(description = "Response containing the PayMongo checkout URL")
+    public record CheckoutResponse(
+            @Schema(example = "https://checkout.paymongo.com/abc123") String checkoutUrl,
+            @Schema(example = "ORD-20261026-ABCD") String orderCode) {}
 }

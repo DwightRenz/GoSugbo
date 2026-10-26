@@ -13,4 +13,7 @@ public interface StoreRepository extends JpaRepository<Store, Integer> {
     Page<Store> findByOwnerId(Integer ownerId, Pageable pageable);
     List<Store> findByOwnerId(Integer ownerId);
     boolean existsByOwnerIdAndNameIgnoreCase(Integer ownerId, String name);
+
+    // NEW: used by OrderService to check ownership without throwing
+    boolean existsByStoreIdAndOwnerId(Integer storeId, Integer ownerId);
 }

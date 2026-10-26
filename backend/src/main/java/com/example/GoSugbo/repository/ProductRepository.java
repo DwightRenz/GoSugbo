@@ -13,7 +13,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
     Page<Product> findByStoreId(Integer storeId, Pageable pageable);
     boolean existsByStoreIdAndNameIgnoreCase(Integer storeId, String name);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE Product p
                SET p.stock = p.stock - :qty
@@ -22,7 +22,7 @@ public interface ProductRepository extends JpaRepository<Product, Integer> {
             """)
     int decrementStock(@Param("productId") Integer productId, @Param("qty") int qty);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Product p SET p.stock = p.stock + :qty WHERE p.productId = :productId")
     int incrementStock(@Param("productId") Integer productId, @Param("qty") int qty);
 }

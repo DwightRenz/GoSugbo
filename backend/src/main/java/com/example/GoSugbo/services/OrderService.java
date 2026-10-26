@@ -45,6 +45,9 @@ public class OrderService {
     private final AddressRepository addresses;
     private final StoreService storeService;
 
+    // NEW: PayMongo integration
+    private final PayMongoService payMongoService;
+
     // ------------------------------------------------------------------ create
 
     @Transactional
@@ -177,7 +180,6 @@ public class OrderService {
 
         OrderStatus next = OrderStatus.fromValue(newStatusValue);
 
-        // Rider-controlled statuses can't be set by the store owner.
         if (next == OrderStatus.PICKED_UP || next == OrderStatus.IN_TRANSIT
                 || next == OrderStatus.DELIVERED) {
             throw ApiException.conflict(
@@ -201,7 +203,8 @@ public class OrderService {
         Order order = require(orderId);
 
         boolean isCustomer = order.getCustomerId().equals(callerId);
-        boolean isStoreOwner = isStoreOwnerOf(callerId, order.getStoreId());
+        // Non-throwing ownership check — safe inside this transaction
+        boolean isStoreOwner = storeService.isOwner(callerId, order.getStoreId());
         if (!isCustomer && !isStoreOwner) {
             throw ApiException.forbidden("You do not have access to this order");
         }
@@ -227,21 +230,61 @@ public class OrderService {
         return OrderSummaryResponse.from(orders.save(order));
     }
 
+    // --------------------------------------------------------- NEW: PayMongo
+
+    @Transactional
+    public CheckoutResponse initiatePayMongoCheckout(int customerId, int orderId,
+                                                     String successUrl, String cancelUrl) {
+        Order order = require(orderId);
+        if (!order.getCustomerId().equals(customerId)) {
+            throw ApiException.forbidden("You do not have access to this order");
+        }
+
+        Payment payment = payments.findByOrderId(orderId)
+                .orElseThrow(() -> ApiException.notFound("Payment record not found"));
+
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            throw ApiException.conflict("Order is already paid");
+        }
+        if (order.getStatus() == OrderStatus.CANCELLED
+                || order.getStatus() == OrderStatus.REFUNDED) {
+            throw ApiException.conflict("Cannot pay for a " + order.getStatus().getValue() + " order");
+        }
+
+        long amountInCentavos = order.getTotalAmount()
+                .multiply(BigDecimal.valueOf(100)).longValue();
+
+        String checkoutUrl = payMongoService.createCheckoutSession(
+                order.getOrderCode(), amountInCentavos, successUrl, cancelUrl
+        );
+
+        payment.setReferenceNo(order.getOrderCode());
+        payment.setMethod(PaymentMethod.CARD);
+        payments.save(payment);
+
+        return new CheckoutResponse(checkoutUrl, order.getOrderCode());
+    }
+
+    @Transactional
+    public void markPaymentPaidByReference(String referenceNo) {
+        payments.findAll().stream()
+                .filter(p -> referenceNo.equals(p.getReferenceNo()))
+                .findFirst()
+                .ifPresent(p -> {
+                    if (p.getStatus() == PaymentStatus.PENDING) {
+                        p.setStatus(PaymentStatus.PAID);
+                        p.setPaidAt(java.time.LocalDateTime.now());
+                        payments.save(p);
+                    }
+                });
+    }
+
     // ---------------------------------------------------------------- helpers
 
     @Transactional(readOnly = true)
     public Order require(int orderId) {
         return orders.findById(orderId)
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
-    }
-
-    private boolean isStoreOwnerOf(int userId, int storeId) {
-        try {
-            storeService.requireOwned(userId, storeId);
-            return true;
-        } catch (ApiException e) {
-            return false;
-        }
     }
 
     private static void validateTransition(OrderStatus from, OrderStatus to) {

@@ -64,10 +64,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/stores/*/products").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/*").permitAll()
 
-                        // --- public ride pricing (browsing before login) -- NEW
+                        // --- public ride pricing (browsing before login)
                         .requestMatchers(HttpMethod.GET, "/api/rides/types").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/rides/estimate").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/rides/nearby-riders").permitAll()
+
+                        // --- PayMongo webhook (must be public — PayMongo has no JWT)
+                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
 
                         // --- swagger + error
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

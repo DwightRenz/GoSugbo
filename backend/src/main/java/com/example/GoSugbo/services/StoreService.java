@@ -137,6 +137,16 @@ public class StoreService {
                 .orElseThrow(() -> ApiException.notFound("Store not found"));
     }
 
+    /**
+     * NEW: non-throwing ownership check.
+     * Safe to call inside another @Transactional method — a false result does
+     * NOT mark the surrounding transaction as rollback-only.
+     */
+    @Transactional(readOnly = true)
+    public boolean isOwner(int userId, int storeId) {
+        return stores.existsByStoreIdAndOwnerId(storeId, userId);
+    }
+
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s.trim();
     }

@@ -5,6 +5,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.transaction.UnexpectedRollbackException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -36,6 +37,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleIntegrity(DataIntegrityViolationException ex) {
         return build(HttpStatus.CONFLICT, "A record with the same unique value already exists", Map.of());
+    }
+
+    // NEW: surfaces the real underlying cause that Spring hides inside UnexpectedRollbackException
+    @ExceptionHandler(UnexpectedRollbackException.class)
+    public ResponseEntity<ErrorResponse> handleRollback(UnexpectedRollbackException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        root.printStackTrace();
+        return build(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Transaction rolled back: " + root.getClass().getSimpleName()
+                        + " - " + root.getMessage(),
+                Map.of());
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, Map<String, String> fields) {

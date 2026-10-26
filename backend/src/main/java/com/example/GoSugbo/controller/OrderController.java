@@ -120,6 +120,34 @@ public class OrderController {
         return orderService.cancel(AddressController.currentUserId(jwt), id, request);
     }
 
+    // --------------------------------------------------------- NEW: PayMongo
+
+    @PostMapping("/{id}/pay")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Initiate PayMongo checkout",
+            description = "Creates a PayMongo Checkout Session for this order and returns the URL "
+                    + "the customer should be redirected to. After paying, PayMongo will hit the "
+                    + "webhook at /api/payments/webhook to mark the payment as paid.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Checkout URL created",
+                    content = @Content(schema = @Schema(implementation = CheckoutResponse.class))),
+            @ApiResponse(responseCode = "400", description = "PayMongo rejected the request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Caller does not own this order",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Order or payment not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Order already paid or not payable",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public CheckoutResponse pay(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                @PathVariable Integer id,
+                                @RequestParam String successUrl,
+                                @RequestParam String cancelUrl) {
+        return orderService.initiatePayMongoCheckout(
+                AddressController.currentUserId(jwt), id, successUrl, cancelUrl);
+    }
+
     // --------------------------------------------------------- store owner
 
     @GetMapping("/stores/{storeId}")

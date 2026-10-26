@@ -44,6 +44,10 @@ public class Payment {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
+    // NEW: store the PayMongo checkout session id for webhook lookups
+    @Column(name = "paymongo_checkout_id", length = 100)
+    private String paymongoCheckoutId;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
