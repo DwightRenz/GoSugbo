@@ -38,7 +38,7 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, GoogleMapsProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -71,6 +71,9 @@ public class SecurityConfig {
 
                         // --- PayMongo webhook (must be public — PayMongo has no JWT)
                         .requestMatchers(HttpMethod.POST, "/api/payments/webhook").permitAll()
+
+                        // --- WebSocket handshake (token auth on WS is separate; see note below)
+                        .requestMatchers("/ws/**").permitAll()
 
                         // --- swagger + error
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

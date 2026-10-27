@@ -1,5 +1,6 @@
 package com.example.GoSugbo.controller;
 
+import com.example.GoSugbo.dto.DeliveryDtos.UpdateLocationRequest;
 import com.example.GoSugbo.dto.RideDtos.*;
 import com.example.GoSugbo.services.RideService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -51,6 +52,17 @@ public class RideDriverController {
                                      @PathVariable Integer id,
                                      @Valid @RequestBody UpdateRideStatusRequest req) {
         return rideService.updateStatus(AddressController.currentUserId(jwt), false, id, req);
+    }
+
+    // NEW — push GPS for an active ride; broadcasts on /topic/rides/{id}/location
+    @PatchMapping("/{id}/location")
+    @Operation(summary = "Push current GPS for an active ride",
+            description = "Rider-only. Broadcasts to /topic/rides/{id}/location for the customer.")
+    public void pushLocation(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                             @PathVariable Integer id,
+                             @Valid @RequestBody UpdateLocationRequest req) {
+        rideService.updateRiderLocationForRide(
+                AddressController.currentUserId(jwt), id, req.lat(), req.lng());
     }
 
     @GetMapping("/mine")

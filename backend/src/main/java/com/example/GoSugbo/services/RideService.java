@@ -35,8 +35,6 @@ public class RideService {
             RideStatus.NO_SHOW,        Set.of()
     );
 
-    private static final double AVG_SPEED_KMH = 25.0;
-
     private final RideRepository rides;
     private final RideTypeRepository rideTypes;
     private final RideStatusHistoryRepository history;
@@ -44,6 +42,8 @@ public class RideService {
     private final UserRepository users;
     private final RiderProfileRepository riders;
     private final PaymentRepository payments;
+    private final GoogleMapsService googleMapsService;
+    private final TrackingBroadcaster trackingBroadcaster;
 
     // ------------------------------------------------------------- pricing
 
@@ -59,16 +59,15 @@ public class RideService {
                 .orElseThrow(() -> ApiException.notFound("Ride type not found"));
         if (!type.isActive()) throw ApiException.conflict("Ride type is not available");
 
-        double km = haversineKm(
+        GoogleMapsService.RouteResult route = googleMapsService.computeRoute(
                 req.pickupLat().doubleValue(), req.pickupLng().doubleValue(),
                 req.dropoffLat().doubleValue(), req.dropoffLng().doubleValue());
 
-        int minutes = (int) Math.max(1, Math.ceil(km / AVG_SPEED_KMH * 60.0));
-        BigDecimal fare = computeFare(type, BigDecimal.valueOf(km), minutes);
+        BigDecimal fare = computeFare(type, route.distanceKm(), route.durationMinutes());
 
         return new FareEstimateResponse(
                 type.getRideTypeId(), type.getName(),
-                round2(BigDecimal.valueOf(km)), minutes, fare);
+                route.distanceKm(), route.durationMinutes(), fare);
     }
 
     // -------------------------------------------------------------- booking
@@ -99,10 +98,9 @@ public class RideService {
             throw ApiException.badRequest("Pickup and dropoff must be different");
         }
 
-        double km = haversineKm(
+        GoogleMapsService.RouteResult route = googleMapsService.computeRoute(
                 pickup.getLatitude().doubleValue(), pickup.getLongitude().doubleValue(),
                 dropoff.getLatitude().doubleValue(), dropoff.getLongitude().doubleValue());
-        int minutes = (int) Math.max(1, Math.ceil(km / AVG_SPEED_KMH * 60.0));
 
         Ride ride = new Ride();
         ride.setCustomerId(customerId);
@@ -114,9 +112,9 @@ public class RideService {
         ride.setDropoffLat(dropoff.getLatitude());
         ride.setDropoffLng(dropoff.getLongitude());
         ride.setStatus(RideStatus.REQUESTED);
-        ride.setEstimatedDistanceKm(round2(BigDecimal.valueOf(km)));
-        ride.setEstimatedDurationMin(minutes);
-        ride.setFareAmount(computeFare(type, BigDecimal.valueOf(km), minutes));
+        ride.setEstimatedDistanceKm(route.distanceKm());
+        ride.setEstimatedDurationMin(route.durationMinutes());
+        ride.setFareAmount(computeFare(type, route.distanceKm(), route.durationMinutes()));
         ride.setNotes(blankToNull(req.notes()));
 
         Ride saved = rides.save(ride);
@@ -209,6 +207,8 @@ public class RideService {
         ride.setAcceptedAt(LocalDateTime.now());
         Ride saved = rides.save(ride);
         log(saved.getRideId(), RideStatus.ACCEPTED, riderId, "Rider accepted ride");
+        trackingBroadcaster.rideStatus(saved.getRideId(),
+                saved.getStatus().getValue(), "Rider accepted ride");
         return build(saved);
     }
 
@@ -285,7 +285,29 @@ public class RideService {
         }
         Ride saved = rides.save(ride);
         log(saved.getRideId(), next, callerId, req.notes());
+        trackingBroadcaster.rideStatus(saved.getRideId(), next.getValue(), req.notes());
         return build(saved);
+    }
+
+    // --------------------------------------------------- rider GPS for ride
+
+    @Transactional
+    public void updateRiderLocationForRide(int riderId, int rideId,
+                                           BigDecimal lat, BigDecimal lng) {
+        Ride ride = rides.findById(rideId)
+                .orElseThrow(() -> ApiException.notFound("Ride not found"));
+        if (ride.getRiderId() == null || !ride.getRiderId().equals(riderId)) {
+            throw ApiException.forbidden("This ride is not assigned to you");
+        }
+        if (!ACTIVE.contains(ride.getStatus())) {
+            throw ApiException.conflict("Ride is not active");
+        }
+        riders.findById(riderId).ifPresent(p -> {
+            p.setCurrentLat(lat);
+            p.setCurrentLng(lng);
+            riders.save(p);
+        });
+        trackingBroadcaster.rideLocation(rideId, riderId, lat, lng);
     }
 
     // --------------------------------------------------------------- reads

@@ -47,7 +47,8 @@ public class DeliveryService {
     private final StoreRepository stores;
     private final AddressRepository addresses;
     private final StoreService storeService;
-    private final RideRepository rides;   // NEW - for mutual exclusion with rides
+    private final RideRepository rides;
+    private final TrackingBroadcaster trackingBroadcaster;   // NEW
 
     // ------------------------------------------------------- available orders
 
@@ -91,7 +92,6 @@ public class DeliveryService {
         if (deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("You already have an active delivery");
         }
-        // NEW: a rider cannot take a delivery while on an active ride
         if (rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
             throw ApiException.conflict("You have an active ride; finish it before accepting deliveries");
         }
@@ -119,7 +119,6 @@ public class DeliveryService {
         if (deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("Rider already has an active delivery");
         }
-        // NEW: same guard on admin assignment
         if (rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
             throw ApiException.conflict("Rider has an active ride; cannot assign a delivery");
         }
@@ -185,7 +184,7 @@ public class DeliveryService {
                 });
                 markCodPaid(order.getOrderId());
             }
-            case CANCELLED -> order.setRiderId(null); // order goes back to the pool
+            case CANCELLED -> order.setRiderId(null);
             case FAILED -> {
                 order.setStatus(OrderStatus.CANCELLED);
                 String note = "Delivery failed" + (isBlank(req.notes()) ? "" : ": " + req.notes().trim());
@@ -201,6 +200,7 @@ public class DeliveryService {
 
         orders.save(order);
         Delivery saved = deliveries.save(d);
+        trackingBroadcaster.deliveryStatus(saved.getDeliveryId(), next.getValue(), req.notes());
         return build(saved);
     }
 
@@ -245,7 +245,6 @@ public class DeliveryService {
         if (!available && deliveries.existsByRiderIdAndStatusIn(riderId, ACTIVE)) {
             throw ApiException.conflict("Finish your active delivery before going offline");
         }
-        // NEW: also block going offline while on an active ride
         if (!available && rides.existsByRiderIdAndStatusIn(riderId, ACTIVE_RIDES)) {
             throw ApiException.conflict("Finish your active ride before going offline");
         }
@@ -259,7 +258,14 @@ public class DeliveryService {
                 .orElseThrow(() -> ApiException.notFound("Rider profile not found"));
         p.setCurrentLat(req.lat());
         p.setCurrentLng(req.lng());
-        return RiderProfileResponse.from(riders.save(p));
+        RiderProfile saved = riders.save(p);
+
+        // NEW: push to the active delivery's subscribers, if any
+        deliveries.findFirstByRiderIdAndStatusInOrderByCreatedAtDesc(riderId, ACTIVE)
+                .ifPresent(d -> trackingBroadcaster.deliveryLocation(
+                        d.getDeliveryId(), riderId, req.lat(), req.lng()));
+
+        return RiderProfileResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -275,7 +281,6 @@ public class DeliveryService {
         return buildAll(List.of(d)).get(0);
     }
 
-    /** Builds responses for many deliveries using batch lookups (no N+1 queries). */
     private List<DeliveryResponse> buildAll(List<Delivery> list) {
         if (list.isEmpty()) return List.of();
 
@@ -324,7 +329,6 @@ public class DeliveryService {
                 .orElseThrow(() -> ApiException.notFound("Order not found"));
     }
 
-    /** deliveries.order_id is UNIQUE, so a cancelled delivery row is reused for the next rider. */
     private Delivery createOrReuse(int orderId, int riderId, DeliveryStatus status) {
         Delivery d = deliveries.findByOrderId(orderId).map(existing -> {
             if (existing.getStatus() != DeliveryStatus.CANCELLED) {
