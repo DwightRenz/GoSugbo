@@ -1,36 +1,29 @@
-import { useState } from 'react';
-import { Alert } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { DefaultTheme, ThemeProvider } from 'expo-router';
+import { useEffect } from 'react';
+import { DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
-import Onboarding from '@/components/gosugbo/onboarding';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  useEffect(() => {
+    void SplashScreen.hideAsync();
+  }, []);
 
   return (
     <SafeAreaProvider>
       <ThemeProvider value={DefaultTheme}>
-        <AnimatedSplashOverlay />
+        <StatusBar style="dark" />
 
-        {showOnboarding ? (
-          <Onboarding
-            onGetStarted={() => setShowOnboarding(false)}
-            onLogin={() =>
-              Alert.alert(
-                'Log in',
-                'Connect this button to your login screen next.'
-              )
-            }
-          />
-        ) : (
-          <AppTabs />
-        )}
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: '#F8F3EB',
+            },
+          }}
+        />
       </ThemeProvider>
     </SafeAreaProvider>
   );
