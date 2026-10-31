@@ -24,15 +24,19 @@ public class AdminBootstrap implements ApplicationRunner {
     @Value("${app.bootstrap-admin.password:}")
     private String password;
 
-    @Value("${app.bootstrap-admin.full-name:System Admin}")
-    private String fullName;
+    @Value("${app.bootstrap-admin.first-name:System}")
+    private String firstName;
+
+    @Value("${app.bootstrap-admin.last-name:Admin}")
+    private String lastName;
 
     @Override
     public void run(ApplicationArguments args) {
         if (email.isBlank() || password.isBlank() || users.existsByRole(Role.ADMIN)) {
             return;
         }
-        authService.registerAdmin(new RegisterAdminRequest(email, password, fullName, null));
+        authService.registerAdmin(new RegisterAdminRequest(
+                firstName, lastName, email, password, password));
         log.warn("Bootstrap admin '{}' created. Change its password and remove app.bootstrap-admin.* from config.", email);
     }
 }

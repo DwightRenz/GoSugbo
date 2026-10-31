@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import com.example.GoSugbo.dto.AuthDtos.GoogleAuthRequest;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -98,6 +99,29 @@ public class AuthController {
     })
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/google")
+    @Operation(summary = "Sign in with Google (Firebase)",
+            description = "Public. Accepts a Firebase ID token obtained after the user completes Google sign-in on the client. "
+                    + "If the email matches an existing account and the Google email is verified, the accounts are linked automatically. "
+                    + "Otherwise a new customer account is created. Returns the same JWT shape as /login.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Login successful",
+                    content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Validation failed or Google account has no email",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Invalid Firebase ID token",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Account pending/inactive/suspended, or unsafe email link",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Email linked to a different Google identity",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "Google sign-in not configured on this server",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public AuthResponse loginWithGoogle(@Valid @RequestBody GoogleAuthRequest request) {
+        return authService.loginWithGoogle(request);
     }
 
     @PostMapping("/logout")

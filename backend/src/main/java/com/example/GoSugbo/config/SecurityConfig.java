@@ -53,6 +53,7 @@ public class SecurityConfig {
                         // --- public auth endpoints
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
+                                "/api/auth/google",
                                 "/api/auth/register/customer",
                                 "/api/auth/register/rider").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").hasRole("ADMIN")
