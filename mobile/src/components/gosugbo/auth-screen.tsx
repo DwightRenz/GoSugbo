@@ -136,17 +136,23 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         return;
       }
 
-      Alert.alert(
-        'Create Account preview',
-        'Your form is valid. Connect your backend to create an account.'
-      );
+      router.push({ pathname: '/verify-email', params: { email: email.trim() } });
       return;
     }
 
-    Alert.alert(
-      'Login preview',
-      'Your form is valid. Connect your backend to sign in.'
-    );
+if (
+  email.trim().toLowerCase() === 'earl@gmail.com' &&
+  password === '1234567890'
+) {
+  router.push({
+    pathname: '/verify-email',
+    params: { email: email.trim() },
+  });
+  return;
+}
+
+setError('Incorrect email or password.');
+
   }
 
   return (
