@@ -15,6 +15,8 @@ public final class AuthDtos {
 
     static final String PASSWORD_REGEX = "^(?=.*[A-Za-z])(?=.*\\d).+$";
     static final String PASSWORD_MSG = "Password must contain at least one letter and one number";
+    static final String OTP_REGEX = "^\\d{6}$";
+    static final String OTP_MSG = "Code must be exactly 6 digits";
 
     // ---------------------------------------------------------------- requests
 
@@ -53,11 +55,31 @@ public final class AuthDtos {
     @Schema(description = "Login credentials (same endpoint for customer, rider and admin)")
     public record LoginRequest(
             @Schema(example = "juan@example.com") @NotBlank @Email String email,
-            @Schema(example = "Passw0rdOk") @NotBlank String password) {}
+            @Schema(example = "Passw0rdOk") @NotBlank String password,
+            @Schema(example = "123456", nullable = true,
+                    description = "Only needed after the server answers 428 OTP_REQUIRED (inactive 30+ days)")
+            @Pattern(regexp = OTP_REGEX, message = OTP_MSG) String otp) {}
 
     @Schema(description = "Google sign-in: send the Firebase ID token obtained on the client")
     public record GoogleAuthRequest(
             @Schema(description = "Firebase ID token from signInWithPopup / getIdToken()") @NotBlank String idToken) {}
+
+    @Schema(description = "Confirm an email address with the emailed code")
+    public record VerifyEmailRequest(
+            @Schema(example = "juan@example.com") @NotBlank @Email String email,
+            @Schema(example = "123456") @NotBlank @Pattern(regexp = OTP_REGEX, message = OTP_MSG) String otp) {}
+
+    @Schema(description = "Request containing only an email (resend verification / forgot password)")
+    public record EmailRequest(
+            @Schema(example = "juan@example.com") @NotBlank @Email String email) {}
+
+    @Schema(description = "Reset a forgotten password with the emailed code")
+    public record ResetPasswordRequest(
+            @Schema(example = "juan@example.com") @NotBlank @Email String email,
+            @Schema(example = "123456") @NotBlank @Pattern(regexp = OTP_REGEX, message = OTP_MSG) String otp,
+            @Schema(example = "NewPassw0rd", description = "8-72 chars, at least one letter and one number")
+            @NotBlank @Size(min = 8, max = 72) @Pattern(regexp = PASSWORD_REGEX, message = PASSWORD_MSG) String newPassword,
+            @Schema(example = "NewPassw0rd") @NotBlank String confirmPassword) {}
 
     // --------------------------------------------------------------- responses
 

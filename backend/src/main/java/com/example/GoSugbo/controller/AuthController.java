@@ -17,12 +17,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import com.example.GoSugbo.dto.AuthDtos.GoogleAuthRequest;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "Registration, login, logout and current-user endpoints")
+@Tag(name = "Authentication", description = "Registration, login, OTP verification, password reset, logout and current-user endpoints")
 public class AuthController {
 
     private final AuthService authService;
@@ -30,7 +29,8 @@ public class AuthController {
     @PostMapping("/register/customer")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Register a customer",
-            description = "Public. Creates an active customer account. Call POST /api/auth/login afterwards to get a token.")
+            description = "Public. Creates a customer account and emails a 6-digit verification code. "
+                    + "Call POST /api/auth/verify-email, then POST /api/auth/login.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Account created",
                     content = @Content(schema = @Schema(implementation = UserResponse.class))),
@@ -46,7 +46,7 @@ public class AuthController {
     @PostMapping("/register/rider")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Register a rider",
-            description = "Public. Creates a rider account plus rider profile (vehicle details). "
+            description = "Public. Creates a rider account plus rider profile (vehicle details) and emails a verification code. "
                     + "Status is 'active' or 'pending' depending on app.auth.rider-auto-approve; "
                     + "a pending rider cannot log in until an admin activates the account.")
     @ApiResponses({
@@ -86,19 +86,64 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "Log in (customer, rider or admin)",
             description = "Public. Returns a JWT access token. Send it on later requests as "
-                    + "'Authorization: Bearer <accessToken>'. The user.role field tells the frontend which area to show.")
+                    + "'Authorization: Bearer <accessToken>'. The user.role field tells the frontend which area to show. "
+                    + "If the email is unverified the response is 403 starting with 'EMAIL_NOT_VERIFIED'. "
+                    + "If the account has been inactive for 30+ days the response is 428 starting with 'OTP_REQUIRED' "
+                    + "and a code is emailed; repeat the request with the 'otp' field filled in.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login successful",
                     content = @Content(schema = @Schema(implementation = AuthResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Validation failed",
+            @ApiResponse(responseCode = "400", description = "Validation failed or invalid OTP",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Invalid email or password",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Account is pending, inactive or suspended",
+            @ApiResponse(responseCode = "403", description = "Email not verified, or account is pending/inactive/suspended",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "428", description = "OTP required (inactive 30+ days)",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/verify-email")
+    @Operation(summary = "Verify email with OTP",
+            description = "Public. Confirms the 6-digit code emailed at registration. After this the user can log in.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Email verified",
+                    content = @Content(schema = @Schema(implementation = MessageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid or expired code",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public MessageResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return authService.verifyEmail(request);
+    }
+
+    @PostMapping("/resend-verification")
+    @Operation(summary = "Resend the email verification code",
+            description = "Public. Always returns the same message so registered emails cannot be discovered.")
+    public MessageResponse resendVerification(@Valid @RequestBody EmailRequest request) {
+        return authService.resendVerification(request);
+    }
+
+    @PostMapping("/forgot-password")
+    @Operation(summary = "Request a password reset code",
+            description = "Public. Emails a 6-digit code if the account exists. Always returns the same message.")
+    public MessageResponse forgotPassword(@Valid @RequestBody EmailRequest request) {
+        return authService.forgotPassword(request);
+    }
+
+    @PostMapping("/reset-password")
+    @Operation(summary = "Reset password with OTP",
+            description = "Public. Sets a new password using the code from /forgot-password.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Password updated",
+                    content = @Content(schema = @Schema(implementation = MessageResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid or expired code, or passwords do not match",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public MessageResponse resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        return authService.resetPassword(request);
     }
 
     @PostMapping("/google")

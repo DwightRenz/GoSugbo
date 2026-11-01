@@ -33,7 +33,6 @@ public class User {
     @Column(name = "last_name", nullable = false, length = 60)
     private String lastName;
 
-    // ✅ NEW FIELD
     @Column(name = "phone", length = 20)
     private String phone;
 
@@ -51,6 +50,12 @@ public class User {
     @Column(name = "profile_image")
     private String profileImage;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
+
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -59,7 +64,6 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    // ✅ NEW COMPUTED GETTER
     public String getFullName() {
         String fn = firstName == null ? "" : firstName.trim();
         String ln = lastName == null ? "" : lastName.trim();

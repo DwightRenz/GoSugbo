@@ -19,4 +19,6 @@ public class ApiException extends RuntimeException {
     public static ApiException conflict(String msg)     { return new ApiException(HttpStatus.CONFLICT, msg); }
     public static ApiException badRequest(String msg)   { return new ApiException(HttpStatus.BAD_REQUEST, msg); }
     public static ApiException serviceUnavailable(String msg) { return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, msg); }
+    public static ApiException tooManyRequests(String msg)    { return new ApiException(HttpStatus.TOO_MANY_REQUESTS, msg); }
+    public static ApiException otpRequired(String msg)        { return new ApiException(HttpStatus.PRECONDITION_REQUIRED, msg); }
 }

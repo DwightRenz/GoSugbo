@@ -51,11 +51,16 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // --- public auth endpoints
+                        // --- public auth endpoints
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
                                 "/api/auth/google",
                                 "/api/auth/register/customer",
-                                "/api/auth/register/rider").permitAll()
+                                "/api/auth/register/rider",
+                                "/api/auth/verify-email",
+                                "/api/auth/resend-verification",
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register/admin").hasRole("ADMIN")
 
                         // --- public store/product browsing (GET only, no auth required)
