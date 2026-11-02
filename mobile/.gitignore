@@ -43,3 +43,5 @@ example
 /android
 
 .git-backup/
+
+.env

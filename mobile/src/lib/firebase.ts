@@ -1,17 +1,14 @@
-import { getApp, getApps, initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyBG2tI8mHD2EQzwSLXZHKJB66ow_XNeDfI',
-  authDomain: 'gosugbo-e469e.firebaseapp.com',
-  projectId: 'gosugbo-e469e',
-  storageBucket: 'gosugbo-e469e.firebasestorage.app',
-  messagingSenderId: '732049052323',
-  appId: '1:732049052323:web:52c3654c42cdda1003a516',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = getApps().length
-  ? getApp()
-  : initializeApp(firebaseConfig);
-
-export const auth = getAuth(app);
+export function getFirebaseAuth() {
+  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  return getAuth(app);
+}
