@@ -1,587 +1,398 @@
-import { FirebaseError } from 'firebase/app';
+import { useState } from "react";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { useAuth } from "@/context/AuthContext";
+import { ApiError } from "@/lib/api";
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { useState } from 'react';
-import {
-  Alert,
-  Image,
-  ImageBackground,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextInputProps,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+  AuthShell,
+  Field,
+  Heading,
+  Message,
+  PrimaryButton,
+  authColors,
+} from "./auth-parts";
 
 type AuthScreenProps = {
-  mode: 'login' | 'signup';
+  mode: "login" | "signup";
 };
 
-type FieldProps = {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  password?: boolean;
-  email?: boolean;
-  autoComplete?: TextInputProps['autoComplete'];
-};
-
-function Field({
-  label,
-  placeholder,
-  value,
-  onChangeText,
-  password = false,
-  email = false,
-  autoComplete,
-}: FieldProps) {
-  const [visible, setVisible] = useState(false);
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
-
-      <View
-        style={[
-          styles.inputContainer,
-          focused && styles.inputFocused,
-        ]}
-      >
-        <TextInput
-          style={styles.input}
-          accessibilityLabel={label}
-          placeholder={placeholder}
-          placeholderTextColor="#B8ABA5"
-          value={value}
-          onChangeText={onChangeText}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          secureTextEntry={password && !visible}
-          keyboardType={email ? 'email-address' : 'default'}
-          autoCapitalize={email || password ? 'none' : 'words'}
-          autoCorrect={!email && !password}
-          autoComplete={autoComplete}
-        />
-
-        {password && (
-          <Pressable
-            onPress={() => setVisible((previous) => !previous)}
-            accessibilityRole="button"
-            accessibilityLabel={
-              visible ? `Hide ${label}` : `Show ${label}`
-            }
-            style={styles.visibilityButton}
-          >
-            <Text style={styles.visibilityText}>
-              {visible ? 'Hide' : 'Show'}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    </View>
-  );
-}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen({ mode }: AuthScreenProps) {
-  const signup = mode === 'signup';
+  const signup = mode === "signup";
+  const params = useLocalSearchParams<{
+    email?: string;
+    verified?: string;
+    reset?: string;
+  }>();
+  const { register, login, loginWithGoogle } = useAuth();
 
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmation, setConfirmation] = useState('');
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState(params.email ?? "");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [error, setError] = useState('');
+  const [otp, setOtp] = useState("");
+  const [otpRequired, setOtpRequired] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState(
+    params.verified ? "Email verified! You can now log in."
+    : params.reset ? "Password updated! You can now log in."
+    : "",
+  );
 
- async function submit() {
-    setError('');
+  function showError(e: unknown) {
+    setError(
+      e instanceof ApiError ?
+        e.displayMessage
+      : "Something went wrong. Please try again.",
+    );
+  }
+
+  async function submit() {
+    if (busy) return;
+    setError("");
+    setInfo("");
 
     if (signup && (!firstName.trim() || !lastName.trim())) {
-      setError('Please enter your first and last name.');
+      setError("Please enter your first and last name.");
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Please enter a valid email address.');
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("Please enter a valid email address.");
       return;
     }
 
     if (!password) {
-      setError('Please enter your password.');
+      setError("Please enter your password.");
       return;
     }
 
     if (signup) {
-      if (password.length < 8 || !/\d/.test(password)) {
+      if (
+        password.length < 8 ||
+        password.length > 72 ||
+        !/[A-Za-z]/.test(password) ||
+        !/\d/.test(password)
+      ) {
         setError(
-          'Your password must have at least 8 characters, including a number.'
+          "Your password must have 8-72 characters, including a letter and a number.",
         );
         return;
       }
 
       if (password !== confirmation) {
-        setError('Your passwords do not match.');
+        setError("Your passwords do not match.");
         return;
       }
 
       if (!acceptedTerms) {
-        setError(
-          'Please accept the Terms of Service and Privacy Policy.'
-        );
+        setError("Please accept the Terms of Service and Privacy Policy.");
+        return;
+      }
+    } else if (otpRequired && !/^\d{6}$/.test(otp.trim())) {
+      setError("Enter the 6-digit code we sent to your email.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (signup) {
+        await register({
+          firstName,
+          lastName,
+          email,
+          password,
+          confirmPassword: confirmation,
+        });
+        router.replace({
+          pathname: "/verify-email",
+          params: { email: email.trim().toLowerCase() },
+        });
         return;
       }
 
-      try {
-  await createUserWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-} catch (error) {
-  if (error instanceof FirebaseError) {
-    setError(`Signup failed: ${error.code}`);
-  } else {
-    setError('An unexpected error occurred.');
+      // On success the route guard in _layout.tsx moves the user to /home.
+      await login({
+        email,
+        password,
+        otp: otpRequired ? otp.trim() : undefined,
+      });
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
+        // The backend already emailed a fresh code.
+        router.push({
+          pathname: "/verify-email",
+          params: { email: email.trim().toLowerCase() },
+        });
+      } else if (e instanceof ApiError && e.code === "OTP_REQUIRED") {
+        // Inactive 30+ days: a code was emailed; ask for it and resubmit.
+        setOtpRequired(true);
+        setOtp("");
+        setInfo(e.message);
+      } else {
+        showError(e);
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
-  return;
-}
-
-router.push({
-  pathname: '/verify-email',
-  params: { email: email.trim() },
-});
-return;
+  async function submitGoogle() {
+    if (busy) return;
+    setError("");
+    setInfo("");
+    setBusy(true);
+    try {
+      await loginWithGoogle(); // returns null if the user cancelled
+    } catch (e) {
+      showError(e);
+    } finally {
+      setBusy(false);
     }
-
-try {
-  await signInWithEmailAndPassword(
-    auth,
-    email.trim(),
-    password
-  );
-
-  router.replace('/home');
-} catch {
-  setError('Unable to sign in. Check your email and password.');
-}
-
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          <ImageBackground
-            source={require('../../../assets/auth/cebu-header.png')}
-            style={styles.header}
-            imageStyle={styles.headerImage}
-            resizeMode="cover"
-          >
-            <Text style={styles.logo}>
-              <Text style={styles.logoAccent}>Go</Text>Sugbo·
-            </Text>
+    <AuthShell>
+      <Heading
+        title={signup ? "Let’s get you started." : "Log in"}
+        subtitle={
+          signup ?
+            "A few details, then you’re good to GoSugbo."
+          : "Welcome back! Please sign in to continue using GoSugbo."
+        }
+      />
 
-            <Text style={styles.tagline}>
-              Ride, Order, Explore Cebu
-            </Text>
-          </ImageBackground>
+      {signup && (
+        <>
+          <Field
+            label="First Name"
+            placeholder="Enter your first name"
+            value={firstName}
+            onChangeText={setFirstName}
+            autoComplete="given-name"
+          />
 
-          <View style={styles.form}>
-            <Text style={styles.heading}>
-              {signup ? 'Let’s get you started.' : 'Log in'}
-            </Text>
+          <Field
+            label="Last Name"
+            placeholder="Enter your last name"
+            value={lastName}
+            onChangeText={setLastName}
+            autoComplete="family-name"
+          />
+        </>
+      )}
 
-            <Text style={styles.subtitle}>
-              {signup
-                ? 'A few details, then you’re good to GoSugbo.'
-                : 'Welcome back! Please sign in to continue using GoSugbo.'}
-            </Text>
+      <Field
+        label="Email address"
+        placeholder="you@example.com"
+        value={email}
+        onChangeText={setEmail}
+        autoComplete="email"
+        email
+      />
 
-            {signup && (
-              <>
-                <Field
-                  label="First Name"
-                  placeholder="Enter your first name"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  autoComplete="given-name"
-                />
+      <Field
+        label="Password"
+        placeholder={signup ? "Create a password" : "Enter your password"}
+        value={password}
+        onChangeText={setPassword}
+        autoComplete={signup ? "new-password" : "current-password"}
+        password
+      />
 
-                <Field
-                  label="Last Name"
-                  placeholder="Enter your last name"
-                  value={lastName}
-                  onChangeText={setLastName}
-                  autoComplete="family-name"
-                />
-              </>
-            )}
+      {signup ?
+        <>
+          <Text style={styles.hint}>
+            Use 8-72 characters, including a letter and a number.
+          </Text>
 
-            <Field
-              label="Email address"
-              placeholder="you@example.com"
-              value={email}
-              onChangeText={setEmail}
-              autoComplete="email"
-              email
-            />
+          <Field
+            label="Confirm Password"
+            placeholder="Confirm password"
+            value={confirmation}
+            onChangeText={setConfirmation}
+            autoComplete="new-password"
+            password
+          />
 
-            <Field
-              label="Password"
-              placeholder={
-                signup ? 'Create a password' : 'Enter your password'
-              }
-              value={password}
-              onChangeText={setPassword}
-              autoComplete={
-                signup ? 'new-password' : 'current-password'
-              }
-              password
-            />
+          <View style={styles.termsRow}>
+            <Pressable
+              onPress={() => setAcceptedTerms((previous) => !previous)}
+              accessibilityRole="checkbox"
+              accessibilityLabel="Accept terms and privacy policy"
+              accessibilityState={{ checked: acceptedTerms }}
+              style={styles.checkboxTarget}>
+              <View
+                style={[
+                  styles.checkbox,
+                  acceptedTerms && styles.checkboxSelected,
+                ]}>
+                {acceptedTerms && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+            </Pressable>
 
-            {signup ? (
-              <>
-                <Text style={styles.hint}>
-                  Use at least 8 characters, including a number.
-                </Text>
-
-                <Field
-                  label="Confirm Password"
-                  placeholder="Confirm password"
-                  value={confirmation}
-                  onChangeText={setConfirmation}
-                  autoComplete="new-password"
-                  password
-                />
-
-                <View style={styles.termsRow}>
-                  <Pressable
-                    onPress={() =>
-                      setAcceptedTerms((previous) => !previous)
-                    }
-                    accessibilityRole="checkbox"
-                    accessibilityLabel="Accept terms and privacy policy"
-                    accessibilityState={{
-                      checked: acceptedTerms,
-                    }}
-                    style={styles.checkboxTarget}
-                  >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        acceptedTerms && styles.checkboxSelected,
-                      ]}
-                    >
-                      {acceptedTerms && (
-                        <Text style={styles.checkmark}>✓</Text>
-                      )}
-                    </View>
-                  </Pressable>
-
-                  <Text style={styles.termsText}>
-                    I agree to the{' '}
-                    <Text
-                      style={styles.bold}
-                      accessibilityRole="link"
-                      onPress={() =>
-                        Alert.alert(
-                          'Terms of Service',
-                          'Add your Terms of Service page here.'
-                        )
-                      }
-                    >
-                      Terms of Service
-                    </Text>
-                    {' and '}
-                    <Text
-                      style={styles.bold}
-                      accessibilityRole="link"
-                      onPress={() =>
-                        Alert.alert(
-                          'Privacy Policy',
-                          'Add your Privacy Policy page here.'
-                        )
-                      }
-                    >
-                      Privacy Policy.
-                    </Text>
-                  </Text>
-                </View>
-              </>
-            ) : (
-              <Pressable
+            <Text style={styles.termsText}>
+              I agree to the{" "}
+              <Text
+                style={styles.bold}
+                accessibilityRole="link"
                 onPress={() =>
                   Alert.alert(
-                    'Forgot password',
-                    'Password reset will be connected later.'
+                    "Terms of Service",
+                    "Add your Terms of Service page here.",
                   )
-                }
-                accessibilityRole="button"
-                style={styles.forgotButton}
-              >
-                <Text style={styles.forgotText}>
-                  Forgot password?
-                </Text>
-              </Pressable>
-            )}
-
-            {!!error && (
+                }>
+                Terms of Service
+              </Text>
+              {" and "}
               <Text
-                style={styles.error}
-                accessibilityLiveRegion="polite"
-              >
-                {error}
+                style={styles.bold}
+                accessibilityRole="link"
+                onPress={() =>
+                  Alert.alert(
+                    "Privacy Policy",
+                    "Add your Privacy Policy page here.",
+                  )
+                }>
+                Privacy Policy.
               </Text>
-            )}
-
-            <Pressable
-              onPress={submit}
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.primaryText}>
-                {signup ? 'Create account' : 'Log in'}
-              </Text>
-            </Pressable>
-
-            <View style={styles.divider}>
-              <View style={styles.line} />
-              <Text style={styles.orText}>or</Text>
-              <View style={styles.line} />
-            </View>
-
-            <Pressable
-              onPress={() =>
-                Alert.alert(
-                  'Google sign-in',
-                  'Google authentication will be connected later.'
-                )
-              }
-              accessibilityRole="button"
-              style={({ pressed }) => [
-                styles.googleButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Image
-                source={require('../../../assets/auth/google-logo.png')}
-                style={styles.googleLogo}
-                resizeMode="contain"
-                accessible={false}
-              />
-
-              <Text style={styles.googleText}>
-                {signup
-                  ? 'Sign up with Google'
-                  : 'Continue with Google'}
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() =>
-                router.replace(signup ? '/login' : '/signup')
-              }
-              accessibilityRole="button"
-              style={styles.switchButton}
-            >
-              <Text style={styles.switchText}>
-                {signup
-                  ? 'Already part of GoSugbo? '
-                  : 'New to GoSugbo? '}
-                <Text style={styles.bold}>
-                  {signup ? 'Log in' : 'Create an account'}
-                </Text>
-              </Text>
-            </Pressable>
+            </Text>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </>
+      : <>
+          {otpRequired && (
+            <Field
+              label="Security code"
+              placeholder="6-digit code from your email"
+              value={otp}
+              onChangeText={(v) => setOtp(v.replace(/\D/g, ""))}
+              numeric
+              maxLength={6}
+            />
+          )}
+
+          <Pressable
+            onPress={() =>
+              router.push({
+                pathname: "/forgot-password",
+                params: { email: email.trim() },
+              })
+            }
+            accessibilityRole="button"
+            style={styles.forgotButton}>
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </Pressable>
+        </>
+      }
+
+      <Message kind="error" text={error} />
+      <Message kind="info" text={info} />
+
+      <PrimaryButton
+        label={
+          signup ? "Create account"
+          : otpRequired ?
+            "Verify and log in"
+          : "Log in"
+        }
+        onPress={submit}
+        loading={busy}
+      />
+
+      <View style={styles.divider}>
+        <View style={styles.line} />
+        <Text style={styles.orText}>or</Text>
+        <View style={styles.line} />
+      </View>
+
+      <Pressable
+        onPress={submitGoogle}
+        disabled={busy}
+        accessibilityRole="button"
+        style={({ pressed }) => [
+          styles.googleButton,
+          (pressed || busy) && styles.pressed,
+        ]}>
+        <Image
+          source={require("../../../assets/auth/google-logo.png")}
+          style={styles.googleLogo}
+          resizeMode="contain"
+          accessible={false}
+        />
+
+        <Text style={styles.googleText}>
+          {signup ? "Sign up with Google" : "Continue with Google"}
+        </Text>
+      </Pressable>
+
+      <Pressable
+        onPress={() => router.replace(signup ? "/login" : "/signup")}
+        accessibilityRole="button"
+        style={styles.switchButton}>
+        <Text style={styles.switchText}>
+          {signup ? "Already part of GoSugbo? " : "New to GoSugbo? "}
+          <Text style={styles.bold}>
+            {signup ? "Log in" : "Create an account"}
+          </Text>
+        </Text>
+      </Pressable>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#F8F3EB',
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 24,
-  },
-  header: {
-    height: 170,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FCF6EB',
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
-    overflow: 'hidden',
-  },
-  headerImage: {
-    opacity: 0.55,
-  },
-  logo: {
-    color: '#4C1C24',
-    fontSize: 28,
-    fontWeight: '800',
-    letterSpacing: -1,
-  },
-  logoAccent: {
-    color: '#B74738',
-  },
-  tagline: {
-    color: '#88766E',
-    fontSize: 14,
-    marginTop: 8,
-  },
-  form: {
-    width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
-  heading: {
-    color: '#4C1C24',
-    fontSize: 25,
-    fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    color: '#88766E',
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  field: {
-    marginBottom: 16,
-  },
-  label: {
-    color: '#4C1C24',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  inputContainer: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5CCB4',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  inputFocused: {
-    borderColor: '#4C1C24',
-  },
-  input: {
-    flex: 1,
-    minWidth: 0,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 14,
-    color: '#4C1C24',
-  },
-  visibilityButton: {
-    minWidth: 48,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingRight: 8,
-  },
-  visibilityText: {
-    color: '#88766E',
-    fontSize: 11,
-    fontWeight: '600',
-  },
   hint: {
-    color: '#88766E',
+    color: authColors.muted,
     fontSize: 11,
     marginTop: -8,
     marginBottom: 18,
   },
   forgotButton: {
     minHeight: 40,
-    alignSelf: 'flex-end',
-    justifyContent: 'center',
+    alignSelf: "flex-end",
+    justifyContent: "center",
     marginTop: -8,
     marginBottom: 10,
   },
   forgotText: {
-    color: '#4C1C24',
+    color: authColors.dark,
     fontSize: 12,
-    fontWeight: '700',
-  },
-  primaryButton: {
-    minHeight: 50,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: '#4C1C24',
-  },
-  primaryText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   pressed: {
-    opacity: 0.8,
+    opacity: 0.6,
   },
   divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
     marginVertical: 20,
   },
   line: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5CCB4',
+    backgroundColor: authColors.border,
   },
   orText: {
-    color: '#88766E',
+    color: authColors.muted,
     fontSize: 12,
   },
   googleButton: {
     minHeight: 50,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
-    borderColor: '#4C1C24',
+    borderColor: authColors.dark,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   googleLogo: {
     width: 20,
@@ -589,64 +400,58 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   googleText: {
-    color: '#4C1C24',
+    color: authColors.dark,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     flexShrink: 1,
-    textAlign: 'center',
+    textAlign: "center",
   },
   switchButton: {
     minHeight: 48,
     marginTop: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   switchText: {
-    color: '#4C1C24',
+    color: authColors.dark,
     fontSize: 12,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 18,
   },
   bold: {
-    color: '#4C1C24',
-    fontWeight: '700',
+    color: authColors.dark,
+    fontWeight: "700",
   },
   termsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 12,
   },
   checkboxTarget: {
     width: 40,
     minHeight: 44,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   checkbox: {
     width: 20,
     height: 20,
     borderWidth: 1,
-    borderColor: '#4C1C24',
+    borderColor: authColors.dark,
     borderRadius: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   checkboxSelected: {
-    backgroundColor: '#4C1C24',
+    backgroundColor: authColors.dark,
   },
   checkmark: {
-    color: '#FFFFFF',
+    color: "#FFFFFF",
     fontSize: 13,
   },
   termsText: {
     flex: 1,
-    color: '#4C1C24',
+    color: authColors.dark,
     fontSize: 11,
     lineHeight: 18,
-  },
-  error: {
-    color: '#A92D36',
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 12,
   },
 });
