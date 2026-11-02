@@ -71,6 +71,23 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
       return;
     }
 
+    // The local test account uses the same OTP flow from either auth screen.
+    if (__DEV__ && email.trim().toLowerCase() === "test@gmail.com") {
+      setBusy(true);
+      try {
+        await login({ email, password });
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "TEST_OTP_REQUIRED") {
+          router.push("/otp");
+        } else {
+          showError(e);
+        }
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (signup) {
       if (
         password.length < 8 ||
@@ -122,7 +139,9 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         otp: otpRequired ? otp.trim() : undefined,
       });
     } catch (e) {
-      if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
+      if (e instanceof ApiError && e.code === "TEST_OTP_REQUIRED") {
+        router.push("/otp");
+      } else if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
         // The backend already emailed a fresh code.
         router.push({
           pathname: "/verify-email",

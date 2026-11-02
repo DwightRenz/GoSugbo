@@ -22,15 +22,17 @@ function RootNavigator() {
         headerShown: false,
         contentStyle: { backgroundColor: "#F8F3EB" },
       }}>
-      {/* Signed-in area */}
-      <Stack.Protected guard={isAuthenticated}>
-        <Stack.Screen name="home" />
-      </Stack.Protected>
+     {/* Signed-in area */}
+<Stack.Protected guard={isAuthenticated}>
+  <Stack.Screen name="home" />
+  <Stack.Screen name="book-ride" />
+</Stack.Protected>
 
       {/* Signed-out area */}
       <Stack.Protected guard={!isAuthenticated}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="otp" />
         <Stack.Screen name="signup" />
         <Stack.Screen name="verify-email" />
         <Stack.Screen name="forgot-password" />

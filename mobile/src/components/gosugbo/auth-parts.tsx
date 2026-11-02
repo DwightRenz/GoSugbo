@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import BackArrow from './back-arrow';
 import {
   ActivityIndicator,
   ImageBackground,
@@ -181,6 +182,7 @@ export function LinkButton({
       disabled={disabled}
       accessibilityRole="button"
       style={[styles.linkButton, disabled && styles.pressed]}>
+        {label.startsWith('Back to ') && <BackArrow />}
       <Text style={styles.linkText}>{label}</Text>
     </Pressable>
   );
@@ -289,6 +291,8 @@ const styles = StyleSheet.create({
   primaryText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   pressed: { opacity: 0.6 },
   linkButton: {
+    flexDirection: 'row',
+    gap: 8,
     minHeight: 44,
     alignItems: "center",
     justifyContent: "center",

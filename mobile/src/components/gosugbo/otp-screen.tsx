@@ -2,8 +2,11 @@ import { useRef, useState, type ComponentRef } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/AuthContext';
+import BackArrow from './back-arrow';
 
 export default function OtpScreen({ email }: { email?: string }) {
+  const { verifyTestOtp } = useAuth();
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   const [code, setCode] = useState('');
   const [focused, setFocused] = useState(false);
@@ -15,11 +18,12 @@ export default function OtpScreen({ email }: { email?: string }) {
       input.current?.focus();
       return;
     }
-    if (code !== '123456') {
-      setError('Incorrect code. Use 123456 for this mockup.');
-      return;
+    try {
+      verifyTestOtp(code);
+      // The authenticated route guard opens /home after verification.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to verify code.');
     }
-    router.replace('/home');
   }
 
   return (
@@ -28,7 +32,7 @@ export default function OtpScreen({ email }: { email?: string }) {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Pressable accessibilityRole="button" accessibilityLabel="Go back" style={styles.back} onPress={() => router.canGoBack() ? router.back() : router.replace('/signup')}>
-              <Text style={styles.arrow}>{'←'}</Text>
+              <BackArrow />
             </Pressable>
             <Text style={styles.headerTitle}>Confirm</Text>
           </View>
@@ -80,7 +84,8 @@ export default function OtpScreen({ email }: { email?: string }) {
               <Text style={styles.verifyText}>Verify Code</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => router.replace('/login')} style={styles.signInButton}>
-              <Text style={styles.signInText}>{'← Back to Sign In'}</Text>
+              <BackArrow />
+              <Text style={styles.signInText}>Back to Sign In</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -120,6 +125,6 @@ const styles = StyleSheet.create({
   verifyButton: { backgroundColor: '#4C1C24', borderRadius: 12, minHeight: 50, alignItems: 'center', justifyContent: 'center' },
   verifyText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   pressed: { opacity: 0.8 },
-  signInButton: { minHeight: 48, marginTop: 10, alignItems: 'center', justifyContent: 'center' },
+  signInButton: { minHeight: 48, marginTop: 10, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
   signInText: { color: '#4C1C24', fontSize: 14, fontWeight: '700' },
 });
