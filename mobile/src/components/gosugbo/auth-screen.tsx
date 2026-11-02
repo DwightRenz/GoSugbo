@@ -1,3 +1,9 @@
+import { FirebaseError } from 'firebase/app';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { useState } from 'react';
 import {
   Alert,
@@ -98,7 +104,7 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState('');
 
-  function submit() {
+ async function submit() {
     setError('');
 
     if (signup && (!firstName.trim() || !lastName.trim())) {
@@ -136,22 +142,40 @@ export default function AuthScreen({ mode }: AuthScreenProps) {
         return;
       }
 
-      router.push({ pathname: '/verify-email', params: { email: email.trim() } });
-      return;
-    }
+      try {
+  await createUserWithEmailAndPassword(
+    auth,
+    email.trim(),
+    password
+  );
+} catch (error) {
+  if (error instanceof FirebaseError) {
+    setError(`Signup failed: ${error.code}`);
+  } else {
+    setError('An unexpected error occurred.');
+  }
 
-if (
-  email.trim().toLowerCase() === 'earl@gmail.com' &&
-  password === '1234567890'
-) {
-  router.push({
-    pathname: '/verify-email',
-    params: { email: email.trim() },
-  });
   return;
 }
 
-setError('Incorrect email or password.');
+router.push({
+  pathname: '/verify-email',
+  params: { email: email.trim() },
+});
+return;
+    }
+
+try {
+  await signInWithEmailAndPassword(
+    auth,
+    email.trim(),
+    password
+  );
+
+  router.replace('/home');
+} catch {
+  setError('Unable to sign in. Check your email and password.');
+}
 
   }
 
