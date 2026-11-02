@@ -15,7 +15,11 @@ export default function OtpScreen({ email }: { email?: string }) {
       input.current?.focus();
       return;
     }
-    Alert.alert('Verification preview', 'Your code is ready. Connect your authentication provider to verify it securely.');
+    if (code !== '123456') {
+      setError('Incorrect code. Use 123456 for this mockup.');
+      return;
+    }
+    router.replace('/home');
   }
 
   return (
