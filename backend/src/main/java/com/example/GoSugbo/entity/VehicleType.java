@@ -4,6 +4,7 @@ import jakarta.persistence.AttributeConverter;
 
 public enum VehicleType {
     MOTORCYCLE("motorcycle"),
+    TRICYCLE("tricycle"),        // NEW
     BICYCLE("bicycle"),
     CAR("car"),
     VAN("van"),

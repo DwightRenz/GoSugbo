@@ -13,6 +13,7 @@ import type {
   LoginInput,
   MessageResponse,
   RegisterCustomerInput,
+  RegisterRiderInput, // NEW
   ResetPasswordInput,
   User,
 } from "@/types/auth";
@@ -34,6 +35,24 @@ export function registerCustomer(input: RegisterCustomerInput) {
       email: normalizeEmail(input.email),
       password: input.password,
       confirmPassword: input.confirmPassword,
+    },
+  });
+}
+
+export function registerRider(input: RegisterRiderInput) {
+  return request<User>("/api/auth/register/rider", {
+    method: "POST",
+    body: {
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      email: normalizeEmail(input.email),
+      password: input.password,
+      confirmPassword: input.confirmPassword,
+      vehicleType: input.vehicleType,
+      ...(input.plateNumber?.trim() ?
+        { plateNumber: input.plateNumber.trim() }
+      : {}),
+      ...(input.licenseNo?.trim() ? { licenseNo: input.licenseNo.trim() } : {}),
     },
   });
 }

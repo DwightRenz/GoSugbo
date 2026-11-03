@@ -28,6 +28,21 @@ export type RegisterCustomerInput = {
   confirmPassword: string;
 };
 
+// NEW
+export type VehicleType = "motorcycle" | "bicycle" | "car" | "van" | "truck";
+
+// NEW
+export type RegisterRiderInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  vehicleType: VehicleType;
+  plateNumber?: string;
+  licenseNo?: string;
+};
+
 export type LoginInput = {
   email: string;
   password: string;

@@ -15,6 +15,7 @@ import type {
   AuthResponse,
   LoginInput,
   RegisterCustomerInput,
+  RegisterRiderInput,
   User,
 } from "@/types/auth";
 
@@ -23,6 +24,7 @@ type AuthContextValue = {
   loading: boolean;
   isAuthenticated: boolean;
   register: (input: RegisterCustomerInput) => Promise<User>;
+  registerRider: (input: RegisterRiderInput) => Promise<User>;
   login: (input: LoginInput) => Promise<User>;
   verifyTestOtp: (code: string) => void;
   loginWithGoogle: () => Promise<User | null>;
@@ -30,6 +32,9 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+// Roles allowed to use this mobile app.
+const ALLOWED_ROLES: ReadonlyArray<User["role"]> = ["customer", "rider"];
 
 // Temporary frontend preview account. Never accepted in production builds.
 const TEST_USER: User = {
@@ -72,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!token) return;
         const me = await authService.fetchMe();
         if (!active) return;
-        if (me.role === "customer") {
+        if (ALLOWED_ROLES.includes(me.role)) {
           setUser(me);
         } else {
           await tokenStorage.clear();
@@ -91,10 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const establishSession = useCallback(
     async (res: AuthResponse): Promise<User> => {
-      // This app is customer-only; the backend login endpoint is shared by all roles.
-      if (res.user.role !== "customer") {
-        await authService.logoutRequest(res.accessToken).catch(() => {}); // revoke it
-        throw new ApiError(403, "This app is for customers only.");
+      // This app supports customers and riders; admin / store_owner tokens
+      // are rejected and revoked.
+      if (!ALLOWED_ROLES.includes(res.user.role)) {
+        await authService.logoutRequest(res.accessToken).catch(() => {});
+        throw new ApiError(403, "This app is for customers and riders only.");
       }
       await tokenStorage.set(res.accessToken);
       setUser(res.user);
@@ -108,28 +114,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-const login = useCallback(
-  async (input: LoginInput) => {
-    const email = input.email.trim().toLowerCase();
+  const registerRider = useCallback(
+    (input: RegisterRiderInput) => authService.registerRider(input),
+    [],
+  );
 
-    if (__DEV__ && email === "test@gmail.com") {
-      if (input.password !== "test12345") {
-        throw new ApiError(
-          401,
-          "Incorrect password for the test account.",
-        );
+  const login = useCallback(
+    async (input: LoginInput) => {
+      const email = input.email.trim().toLowerCase();
+
+      if (__DEV__ && email === "test@gmail.com") {
+        if (input.password !== "test12345") {
+          throw new ApiError(401, "Incorrect password for the test account.");
+        }
+
+        await tokenStorage.clear();
+        testLoginPending.current = false;
+        setUser(TEST_USER);
+        return TEST_USER;
       }
 
-      await tokenStorage.clear();
-      testLoginPending.current = false;
-      setUser(TEST_USER);
-      return TEST_USER;
-    }
-
-    return establishSession(await authService.login(input));
-  },
-  [establishSession],
-);
+      return establishSession(await authService.login(input));
+    },
+    [establishSession],
+  );
 
   const loginWithGoogle = useCallback(async () => {
     const res = await authService.signInWithGoogle();
@@ -166,12 +174,22 @@ const login = useCallback(
       loading,
       isAuthenticated: user !== null,
       register,
+      registerRider,
       login,
       verifyTestOtp,
       loginWithGoogle,
       logout,
     }),
-    [user, loading, register, login, verifyTestOtp, loginWithGoogle, logout],
+    [
+      user,
+      loading,
+      register,
+      registerRider,
+      login,
+      verifyTestOtp,
+      loginWithGoogle,
+      logout,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
