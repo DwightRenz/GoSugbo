@@ -25,7 +25,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   register: (input: RegisterCustomerInput) => Promise<User>;
   registerRider: (input: RegisterRiderInput) => Promise<User>;
-  login: (input: LoginInput) => Promise<User>;
+  login: (input: LoginInput, previewRole?: "customer" | "rider") => Promise<User>;
   verifyTestOtp: (code: string) => void;
   loginWithGoogle: () => Promise<User | null>;
   logout: () => Promise<void>;
@@ -46,6 +46,13 @@ const TEST_USER: User = {
   status: "active",
   profileImage: null,
   createdAt: "2026-01-01T00:00:00Z",
+};
+
+const TEST_RIDER: User = {
+  ...TEST_USER,
+  id: -2,
+  lastName: "Rider",
+  role: "rider",
 };
 
 export function useAuth(): AuthContextValue {
@@ -120,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(
-    async (input: LoginInput) => {
+    async (input: LoginInput, previewRole: "customer" | "rider" = "customer") => {
       const email = input.email.trim().toLowerCase();
 
       if (__DEV__ && email === "test@gmail.com") {
@@ -130,8 +137,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         await tokenStorage.clear();
         testLoginPending.current = false;
-        setUser(TEST_USER);
-        return TEST_USER;
+        const previewUser = previewRole === "rider" ? TEST_RIDER : TEST_USER;
+        setUser(previewUser);
+        return previewUser;
       }
 
       return establishSession(await authService.login(input));
@@ -154,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    if (__DEV__ && user === TEST_USER) {
+    if (__DEV__ && (user === TEST_USER || user === TEST_RIDER)) {
       setUser(null);
       return;
     }

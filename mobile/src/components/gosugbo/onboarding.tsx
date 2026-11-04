@@ -28,11 +28,13 @@ const slides = [
 type Props = {
   onGetStarted: () => void;
   onLogin: () => void;
+  onBecomeRider: () => void;
 };
 
 export default function Onboarding({
   onGetStarted,
   onLogin,
+  onBecomeRider,
 }: Props) {
   const carousel = useRef<ComponentRef<typeof ScrollView>>(null);
 
@@ -182,6 +184,16 @@ export default function Onboarding({
           <Text style={styles.loginText}>
             Already have an account?{' '}
             <Text style={styles.loginLink}>Log in</Text>
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onBecomeRider}
+          accessibilityRole="button"
+          style={styles.riderButton}
+        >
+          <Text style={styles.riderText}>
+            Want to drive?{' '}
+            <Text style={styles.loginLink}>Become a GoSugbo rider</Text>
           </Text>
         </Pressable>
       </View>
@@ -335,5 +347,17 @@ const styles = StyleSheet.create({
 
   loginLink: {
     fontWeight: '700',
+  },
+  riderButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  riderText: {
+    color: '#4C1C24',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 });

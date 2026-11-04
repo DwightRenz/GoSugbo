@@ -135,7 +135,7 @@ export default function RiderAuthScreen({ mode }: RiderAuthScreenProps) {
         email,
         password,
         otp: otpRequired ? otp.trim() : undefined,
-      });
+      }, "rider");
     } catch (e) {
       if (e instanceof ApiError && e.code === "TEST_OTP_REQUIRED") {
         router.push("/otp");
