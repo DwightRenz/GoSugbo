@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
+import LogoutButton from "./logout-button"; // ← NEW
 
 const icons = {
   rightArrow: require("../../../assets/home/right-arrow.png"),
@@ -67,9 +68,14 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-          <Text style={styles.logo}>
-            GoSugbo<Text style={styles.logoDot}>·</Text>
-          </Text>
+
+          {/* ← NEW: title + logout on the same row */}
+          <View style={styles.titleRow}>
+            <Text style={styles.logo}>
+              GoSugbo<Text style={styles.logoDot}>·</Text>
+            </Text>
+            <LogoutButton />
+          </View>
 
           <Text style={styles.greeting}>
             Maayong adlaw{user?.firstName ? `, ${user.firstName}` : ""}!
@@ -176,7 +182,7 @@ export default function HomeScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => preview("Your rides")}
+            onPress={() => router.push("/my-rides")}
             style={({ pressed }) => [
               styles.orderCard,
               pressed && styles.pressed,
@@ -425,6 +431,14 @@ const styles = StyleSheet.create({
     paddingTop: 24,
     paddingBottom: 24,
   },
+
+  // ← NEW: title row aligns logo left, logout right
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
   logo: {
     color: "#AD342E",
     fontSize: 34,

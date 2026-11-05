@@ -18,10 +18,6 @@ export default function LogoutButton() {
 
 const styles = StyleSheet.create({
   button: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    zIndex: 10,
     minHeight: 36,
     paddingHorizontal: 14,
     borderRadius: 999,

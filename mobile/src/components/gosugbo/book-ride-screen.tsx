@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "./back-arrow";
 import { ApiError } from "@/lib/api";
+import { isPlusCode } from "@/lib/format";
 import {
   bookRide,
   createAddress,
@@ -27,7 +28,6 @@ import type { FareEstimate, RideType } from "@/types/ride";
 export type Coordinates = { latitude: number; longitude: number };
 type LocationType = "pickup" | "destination";
 
-// Visual fallback used until backend ride types arrive (and if the request fails)
 const FALLBACK_TYPES = [
   {
     id: "motorbike",
@@ -55,7 +55,6 @@ const FALLBACK_TYPES = [
   },
 ];
 
-// Map backend ride type names -> local icon keys
 function iconKeyForRideType(
   name: string,
 ): "motorbike" | "tricycle4" | "tricycle6" {
@@ -76,8 +75,46 @@ function iconFor(key: "motorbike" | "tricycle4" | "tricycle6") {
   }
 }
 
+/** Build a readable address label from an expo-location reverse geocode result.
+ *  Skips Plus Codes entirely (Android sometimes puts them in `name`/`street`). */
+function buildAddressLabel(
+  geo: Location.LocationGeocodedAddress | undefined,
+  fallbackCoords: Coordinates,
+): string {
+  if (!geo) {
+    return `${fallbackCoords.latitude.toFixed(5)}, ${fallbackCoords.longitude.toFixed(5)}`;
+  }
+  const parts = [geo.name, geo.street, geo.streetNumber, geo.district]
+    .filter((p): p is string => !!p && !isPlusCode(p))
+    .map((p) => p.trim());
+  const deduped = parts.filter((p, i) => parts.indexOf(p) === i);
+  const label = deduped.join(", ");
+  if (label) return label;
+  const district = [geo.district, geo.city]
+    .filter((p): p is string => !!p && !isPlusCode(p))
+    .join(", ");
+  if (district) return district;
+  return `${fallbackCoords.latitude.toFixed(5)}, ${fallbackCoords.longitude.toFixed(5)}`;
+}
+
+/** Build the fields we save to /api/addresses. */
+function buildAddressFields(
+  geo: Location.LocationGeocodedAddress | undefined,
+  fallbackCoords: Coordinates,
+): { line1: string; city: string; province: string } {
+  const line1 = buildAddressLabel(geo, fallbackCoords);
+  const safe = (v: string | null | undefined) =>
+    v && !isPlusCode(v) ? v : null;
+  const city =
+    safe(geo?.city) ??
+    safe(geo?.subregion) ??
+    safe(geo?.district) ??
+    "Unknown city";
+  const province = safe(geo?.region) ?? "Cebu";
+  return { line1, city, province };
+}
+
 export default function BookRideScreen() {
-  // Locations
   const [pickup, setPickup] = useState("");
   const [pickupCoords, setPickupCoords] = useState<Coordinates | null>(null);
   const [destination, setDestination] = useState("");
@@ -85,7 +122,6 @@ export default function BookRideScreen() {
     useState<Coordinates | null>(null);
   const [locationError, setLocationError] = useState("");
 
-  // Map picker
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [selecting, setSelecting] = useState<LocationType>("destination");
   const [pickerInitial, setPickerInitial] = useState<Coordinates>({
@@ -99,7 +135,6 @@ export default function BookRideScreen() {
   const mapRef = useRef<MapView>(null);
   const lookupVersion = useRef({ pickup: 0, destination: 0 });
 
-  // Ride types (fetched from backend)
   const [rideTypes, setRideTypes] = useState<FareEstimate[] | null>(null);
   const [backendTypes, setBackendTypes] = useState<RideType[] | null>(null);
   const [typesError, setTypesError] = useState("");
@@ -107,16 +142,13 @@ export default function BookRideScreen() {
     null,
   );
 
-  // Estimate
   const [estimate, setEstimate] = useState<FareEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [estimateError, setEstimateError] = useState("");
 
-  // Booking
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState("");
 
-  // ---- Load ride types on mount ----
   useEffect(() => {
     let active = true;
     (async () => {
@@ -143,7 +175,6 @@ export default function BookRideScreen() {
     };
   }, []);
 
-  // ---- Load current location for pickup ----
   useEffect(() => {
     let active = true;
 
@@ -188,18 +219,8 @@ export default function BookRideScreen() {
 
         try {
           const [address] = await Location.reverseGeocodeAsync(coordinates);
-          if (!active || !address || lookupVersion.current.pickup > 0) return;
-          const label = [
-            address.name,
-            address.street,
-            address.district,
-            address.city,
-          ]
-            .filter(
-              (part, index, parts) =>
-                Boolean(part) && parts.indexOf(part) === index,
-            )
-            .join(", ");
+          if (!active || lookupVersion.current.pickup > 0) return;
+          const label = buildAddressLabel(address, coordinates);
           if (label) {
             const coordinateLabel = `${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}`;
             setPickup((current) =>
@@ -207,7 +228,7 @@ export default function BookRideScreen() {
             );
           }
         } catch {
-          // Keep coordinates when an address cannot be found.
+          /* keep coordinates */
         }
       } catch {
         if (active) {
@@ -224,7 +245,6 @@ export default function BookRideScreen() {
     };
   }, []);
 
-  // ---- Reverse geocode helper ----
   async function updateLocation(type: LocationType, coordinates: Coordinates) {
     const version = ++lookupVersion.current[type];
     const setCoordinates =
@@ -237,28 +257,13 @@ export default function BookRideScreen() {
     try {
       const [address] = await Location.reverseGeocodeAsync(coordinates);
       if (!address || version !== lookupVersion.current[type]) return;
-      const label = [
-        address.name,
-        address.street,
-        address.district,
-        address.city,
-      ]
-        .filter(
-          (part, index, parts) =>
-            Boolean(part) && parts.indexOf(part) === index,
-        )
-        .join(", ");
-      if (label) {
-        setAddress((current) =>
-          current === coordinateLabel ? label : current,
-        );
-      }
+      const label = buildAddressLabel(address, coordinates);
+      setAddress((current) => (current === coordinateLabel ? label : current));
     } catch {
-      // Keep the selected coordinates when address lookup is unavailable.
+      /* keep coordinates */
     }
   }
 
-  // ---- Fit map when both coords are set ----
   useEffect(() => {
     if (pickupCoords && destinationCoords) {
       mapRef.current?.fitToCoordinates([pickupCoords, destinationCoords], {
@@ -268,9 +273,6 @@ export default function BookRideScreen() {
     }
   }, [pickupCoords, destinationCoords]);
 
-  // ---- Re-estimate when coords/type change ----
-  // ---- Re-estimate when coords/type change ----
-  // ---- Re-estimate when coords/type change ----
   useEffect(() => {
     if (!pickupCoords || !destinationCoords || selectedRideTypeId == null) {
       return;
@@ -305,7 +307,6 @@ export default function BookRideScreen() {
     };
   }, [pickupCoords, destinationCoords, selectedRideTypeId]);
 
-  // ---- Derived UI values ----
   const selectedBackendType = useMemo(() => {
     if (!backendTypes || selectedRideTypeId == null) return null;
     return (
@@ -330,7 +331,6 @@ export default function BookRideScreen() {
   const displayDistance = estimate?.estimatedDistanceKm ?? null;
   const displayMinutes = estimate?.estimatedDurationMin ?? null;
 
-  // ---- Handlers ----
   function openMapPicker(type: LocationType) {
     setSelecting(type);
     pickerCenter.current = (type === "pickup" ? pickupCoords : (
@@ -366,42 +366,18 @@ export default function BookRideScreen() {
 
     setBooking(true);
     try {
-      // Reverse-geocode both points so required address fields are filled.
       const [pickupGeo] = await Location.reverseGeocodeAsync(pickupCoords);
       const [dropoffGeo] =
         await Location.reverseGeocodeAsync(destinationCoords);
 
-      const pickupLine1 =
-        [pickupGeo?.name, pickupGeo?.street, pickupGeo?.streetNumber]
-          .filter(Boolean)
-          .join(", ") ||
-        pickup.trim() ||
-        "Pickup location";
-
-      const pickupCity =
-        pickupGeo?.city ??
-        pickupGeo?.subregion ??
-        pickupGeo?.district ??
-        "Cebu City";
-
-      const dropoffLine1 =
-        [dropoffGeo?.name, dropoffGeo?.street, dropoffGeo?.streetNumber]
-          .filter(Boolean)
-          .join(", ") ||
-        destination.trim() ||
-        "Destination";
-
-      const dropoffCity =
-        dropoffGeo?.city ??
-        dropoffGeo?.subregion ??
-        dropoffGeo?.district ??
-        "Cebu City";
+      const pickupFields = buildAddressFields(pickupGeo, pickupCoords);
+      const dropoffFields = buildAddressFields(dropoffGeo, destinationCoords);
 
       const pickupAddress = await createAddress({
         label: "Pickup",
-        line1: pickupLine1,
-        city: pickupCity,
-        province: pickupGeo?.region ?? "Cebu",
+        line1: pickupFields.line1,
+        city: pickupFields.city,
+        province: pickupFields.province,
         country: pickupGeo?.country ?? "Philippines",
         latitude: pickupCoords.latitude,
         longitude: pickupCoords.longitude,
@@ -409,9 +385,9 @@ export default function BookRideScreen() {
 
       const dropoffAddress = await createAddress({
         label: "Destination",
-        line1: dropoffLine1,
-        city: dropoffCity,
-        province: dropoffGeo?.region ?? "Cebu",
+        line1: dropoffFields.line1,
+        city: dropoffFields.city,
+        province: dropoffFields.province,
         country: dropoffGeo?.country ?? "Philippines",
         latitude: destinationCoords.latitude,
         longitude: destinationCoords.longitude,
@@ -439,7 +415,6 @@ export default function BookRideScreen() {
     }
   }
 
-  // ---- Render ----
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <View style={styles.container}>

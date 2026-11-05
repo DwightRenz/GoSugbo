@@ -80,6 +80,20 @@ public class RideController {
         return rideService.getActiveAsCustomer(AddressController.currentUserId(jwt));
     }
 
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Update a ride's status (customer)",
+            description = "Customers may only cancel their own ride. "
+                    + "Allowed while status is requested or accepted; "
+                    + "an in-progress ride cannot be cancelled.")
+    public RideResponse updateStatus(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Integer id,
+            @Valid @RequestBody UpdateRideStatusRequest req) {
+        return rideService.updateStatus(
+                AddressController.currentUserId(jwt), false, id, req);
+    }
+
     // ------------------------------------------------- customer + rider + admin
 
     @GetMapping("/{id}")

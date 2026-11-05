@@ -1,66 +1,49 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { router } from "expo-router";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  filterTripsByPeriod,
+  useRiderEarnings,
+  type EarningsPeriod,
+} from "@/hooks/use-rider-earnings";
+import type { EarningsTrip } from "@/services/riderService";
 
 const burgundy = "#701F2B";
-const periods = ["Today", "This Week", "This Month"] as const;
-type Period = (typeof periods)[number];
-
-const trips = [
-  {
-    id: 1,
-    route: "Panagsama → Moalboal Town",
-    time: "Today, 8:24 AM",
-    fare: 120,
-    commission: 15,
-    daysAgo: 0,
-  },
-  {
-    id: 2,
-    route: "White Beach → Basdiot",
-    time: "Today, 7:12 AM",
-    fare: 90,
-    commission: 10,
-    daysAgo: 0,
-  },
-  {
-    id: 3,
-    route: "Maravilla → Kawasan Falls",
-    time: "Today, 6:30 AM",
-    fare: 240,
-    commission: 20,
-    daysAgo: 0,
-  },
-  {
-    id: 4,
-    route: "Basdiot → Moalboal Market",
-    time: "Yesterday, 4:15 PM",
-    fare: 100,
-    commission: 10,
-    daysAgo: 1,
-  },
-  {
-    id: 5,
-    route: "Moalboal → White Beach",
-    time: "10 days ago, 9:30 AM",
-    fare: 150,
-    commission: 15,
-    daysAgo: 10,
-  },
-];
+const periods: EarningsPeriod[] = ["Today", "This Week", "This Month"];
 
 function money(amount: number) {
   return `₱${amount.toFixed(2)}`;
+}
+
+function formatTripTime(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  if (sameDay) return `Today, ${time}`;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function Coins({ white = false }: { white?: boolean }) {
@@ -84,44 +67,22 @@ function Coins({ white = false }: { white?: boolean }) {
 }
 
 export default function RiderEarningsScreen() {
-  const [period, setPeriod] = useState<Period>("Today");
-  const [online, setOnline] = useState(true);
-  const [wallet, setWallet] = useState(100);
+  const [period, setPeriod] = useState<EarningsPeriod>("Today");
   const [showAll, setShowAll] = useState(false);
 
-  const filteredTrips = trips.filter((trip) => {
-    if (period === "Today") return trip.daysAgo === 0;
-    if (period === "This Week") return trip.daysAgo < 7;
-    return trip.daysAgo < 30;
-  });
+  const { trips, loading, refreshing, error, refresh } = useRiderEarnings();
 
-  const commission = filteredTrips.reduce(
-    (total, trip) => total + trip.commission,
-    0,
+  const filteredTrips = useMemo(
+    () => filterTripsByPeriod(trips, period),
+    [trips, period],
   );
 
-  const earnings = filteredTrips.reduce(
-    (total, trip) => total + trip.fare - trip.commission,
-    0,
+  const earnings = useMemo(
+    () => filteredTrips.reduce((sum, t) => sum + t.fare, 0),
+    [filteredTrips],
   );
 
-  const visibleTrips = showAll
-    ? filteredTrips
-    : filteredTrips.slice(0, 3);
-
-  function topUp() {
-    Alert.alert(
-      "Demo wallet top-up",
-      "Add ₱100 to your preview wallet? No payment will be made.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Add ₱100",
-          onPress: () => setWallet((balance) => balance + 100),
-        },
-      ],
-    );
-  }
+  const visibleTrips = showAll ? filteredTrips : filteredTrips.slice(0, 3);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -129,11 +90,16 @@ export default function RiderEarningsScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
-        >
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refresh}
+              tintColor={burgundy}
+            />
+          }>
           <View style={styles.header}>
             <View style={styles.brand}>
               <Text style={styles.logo}>GoSugbo·</Text>
-
               <View style={styles.riderBadge}>
                 <Image
                   source={require("../../assets/home/single-motor-pin.png")}
@@ -142,25 +108,6 @@ export default function RiderEarningsScreen() {
                 />
                 <Text style={styles.badgeText}>Rider</Text>
               </View>
-            </View>
-
-            <View style={styles.onlineControl}>
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: online ? "#0DB477" : "#A49287" },
-                ]}
-              />
-              <Text style={styles.onlineText}>
-                {online ? "Online" : "Offline"}
-              </Text>
-              <Switch
-                accessibilityLabel="Demo online status"
-                value={online}
-                onValueChange={setOnline}
-                trackColor={{ false: "#D4C5BC", true: burgundy }}
-                thumbColor="#FFFFFF"
-              />
             </View>
           </View>
 
@@ -173,38 +120,36 @@ export default function RiderEarningsScreen() {
             />
             <Text style={styles.title}>Earnings</Text>
             <Text style={styles.subtitle}>
-              Track your income and commission
+              Track your completed trips and income
             </Text>
           </View>
 
           <View style={styles.summary}>
             <View style={styles.wave} />
-
             <View style={styles.earningsColumn}>
               <Text style={styles.summaryLabel}>
-                {period === "Today" ? "Today’s Earnings" : `${period}’s Earnings`}
+                {period === "Today" ?
+                  "Today’s Earnings"
+                : `${period}’s Earnings`}
               </Text>
               <Text
                 style={styles.earningsAmount}
                 adjustsFontSizeToFit
-                numberOfLines={1}
-              >
-                {money(earnings)}
+                numberOfLines={1}>
+                {loading ? "…" : money(earnings)}
               </Text>
               <Text style={styles.completed}>
-                {filteredTrips.length} completed trips
+                {loading ?
+                  "Loading…"
+                : `${filteredTrips.length} completed trip${filteredTrips.length === 1 ? "" : "s"}`
+                }
               </Text>
             </View>
-
             <View style={styles.commissionColumn}>
               <Coins white />
-              <Text style={styles.commissionLabel}>Commission</Text>
-              <Text
-                style={styles.commissionAmount}
-                adjustsFontSizeToFit
-                numberOfLines={1}
-              >
-                {money(commission)}
+              <Text style={styles.commissionLabel}>Trips</Text>
+              <Text style={styles.commissionAmount}>
+                {loading ? "…" : String(filteredTrips.length)}
               </Text>
             </View>
           </View>
@@ -222,116 +167,58 @@ export default function RiderEarningsScreen() {
                 style={[
                   styles.filter,
                   period === item && styles.selectedFilter,
-                ]}
-              >
+                ]}>
                 <Text
                   style={[
                     styles.filterText,
                     period === item && styles.selectedFilterText,
-                  ]}
-                >
+                  ]}>
                   {item}
                 </Text>
               </Pressable>
             ))}
           </View>
 
-          <View style={styles.wallet}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                Alert.alert(
-                  "Commission Wallet",
-                  `Demo balance: ${money(wallet)}\nThis wallet covers GoSugbo fees.`,
-                )
-              }
-              style={styles.walletRow}
-            >
-              <View style={styles.walletIcon}>
-                <View style={styles.walletOutline}>
-                  <View style={styles.walletClasp} />
-                </View>
-              </View>
-
-              <View style={styles.walletDetails}>
-                <Text style={styles.walletTitle}>Commission Wallet</Text>
-                <Text style={styles.walletDescription}>
-                  Balance for GoSugbo fees
-                </Text>
-              </View>
-
-              <Text style={styles.walletAmount}>{money(wallet)}</Text>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={topUp}
-              style={({ pressed }) => [
-                styles.topUp,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.topUpText}>＋  Top Up Wallet</Text>
-            </Pressable>
-          </View>
-
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Trip History</Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setShowAll((value) => !value)}
-              style={styles.viewAll}
-            >
-              <Text style={styles.viewAllText}>
-                {showAll ? "Show Less" : "View All"}  ›
-              </Text>
-            </Pressable>
+            {filteredTrips.length > 3 && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setShowAll((v) => !v)}
+                style={styles.viewAll}>
+                <Text style={styles.viewAllText}>
+                  {showAll ? "Show Less" : "View All"} ›
+                </Text>
+              </Pressable>
+            )}
           </View>
 
-          {visibleTrips.map((trip) => (
-            <Pressable
-              key={trip.id}
-              accessibilityRole="button"
-              onPress={() =>
-                Alert.alert(
-                  trip.route,
-                  `${trip.time}\n\nFare: ${money(trip.fare)}\nCommission: ${money(trip.commission)}\nYour earnings: ${money(trip.fare - trip.commission)}`,
-                )
-              }
-              style={({ pressed }) => [
-                styles.tripCard,
-                pressed && styles.pressed,
-              ]}
-            >
-              <View style={styles.tripIcon}>
-                <Image
-                  source={require("../../assets/home/single-motor-pin.png")}
-                  style={styles.motorcycle}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-              </View>
-
-              <View style={styles.tripDetails}>
-                <Text style={styles.tripRoute}>{trip.route}</Text>
-                <Text style={styles.tripTime}>{trip.time}</Text>
-                <Text style={styles.tripFees}>
-                  Fare: ₱{trip.fare} · Commission: ₱{trip.commission}
-                </Text>
-              </View>
-
-              <View style={styles.tripAmountRow}>
-                <Text style={styles.tripAmount}>
-                  {money(trip.fare - trip.commission)}
-                </Text>
-                <Text style={styles.chevron}>›</Text>
-              </View>
-            </Pressable>
-          ))}
+          {loading ?
+            <View style={styles.center}>
+              <ActivityIndicator color={burgundy} />
+              <Text style={styles.centerText}>Loading trips…</Text>
+            </View>
+          : error ?
+            <View style={styles.center}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable onPress={refresh} style={styles.retry}>
+                <Text style={styles.retryText}>Try again</Text>
+              </Pressable>
+            </View>
+          : visibleTrips.length === 0 ?
+            <View style={styles.center}>
+              <Text style={styles.emptyText}>
+                No completed trips{" "}
+                {period === "Today" ? "today" : `in ${period.toLowerCase()}`}.
+              </Text>
+            </View>
+          : visibleTrips.map((trip) => (
+              <TripCard key={trip.rideId} trip={trip} />
+            ))
+          }
 
           <Text style={styles.demoNote}>
-            Preview only · Sample earnings and wallet balance
+            Live completed trips · Commission and wallet coming soon
           </Text>
         </ScrollView>
 
@@ -351,37 +238,33 @@ export default function RiderEarningsScreen() {
                   );
                 }
               }}
-              style={styles.navigationItem}
-            >
+              style={styles.navigationItem}>
               <View
                 style={[
                   styles.navigationIcon,
                   tab === "Earnings" && styles.activeNavigation,
-                ]}
-              >
-                {tab === "Earnings" ? (
+                ]}>
+                {tab === "Earnings" ?
                   <Coins />
-                ) : tab === "Home" ? (
+                : tab === "Home" ?
                   <Text style={styles.homeSymbol}>⌂</Text>
-                ) : (
-                  <Image
+                : <Image
                     source={
-                      tab === "Trips"
-                        ? require("../../assets/home/orders-pin.png")
-                        : require("../../assets/home/profile-pin.png")
+                      tab === "Trips" ?
+                        require("../../assets/home/orders-pin.png")
+                      : require("../../assets/home/profile-pin.png")
                     }
                     style={styles.tabImage}
                     resizeMode="contain"
                     accessible={false}
                   />
-                )}
+                }
               </View>
               <Text
                 style={[
                   styles.navigationLabel,
                   tab === "Earnings" && styles.activeLabel,
-                ]}
-              >
+                ]}>
                 {tab}
               </Text>
             </Pressable>
@@ -392,14 +275,40 @@ export default function RiderEarningsScreen() {
   );
 }
 
+function TripCard({ trip }: { trip: EarningsTrip }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={() =>
+        Alert.alert(
+          trip.route,
+          `${formatTripTime(trip.completedAt)}\n\nFare: ${money(trip.fare)}`,
+        )
+      }
+      style={({ pressed }) => [styles.tripCard, pressed && styles.pressed]}>
+      <View style={styles.tripIcon}>
+        <Image
+          source={require("../../assets/home/single-motor-pin.png")}
+          style={styles.motorcycle}
+          resizeMode="contain"
+          accessible={false}
+        />
+      </View>
+      <View style={styles.tripDetails}>
+        <Text style={styles.tripRoute}>{trip.route}</Text>
+        <Text style={styles.tripTime}>{formatTripTime(trip.completedAt)}</Text>
+      </View>
+      <View style={styles.tripAmountRow}>
+        <Text style={styles.tripAmount}>{money(trip.fare)}</Text>
+        <Text style={styles.chevron}>›</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#FFF3E9" },
-  container: {
-    flex: 1,
-    width: "100%",
-    maxWidth: 520,
-    alignSelf: "center",
-  },
+  container: { flex: 1, width: "100%", maxWidth: 520, alignSelf: "center" },
   content: { padding: 16, paddingBottom: 24 },
   header: {
     flexDirection: "row",
@@ -426,18 +335,6 @@ const styles = StyleSheet.create({
   },
   badgeImage: { width: 21, height: 19, tintColor: burgundy },
   badgeText: { color: burgundy, fontWeight: "700", fontSize: 12 },
-  onlineControl: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingLeft: 10,
-    paddingRight: 3,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 25,
-    minHeight: 44,
-  },
-  statusDot: { width: 9, height: 9, borderRadius: 5 },
-  onlineText: { color: burgundy, fontSize: 12 },
   heading: {
     marginTop: 24,
     paddingTop: 12,
@@ -528,59 +425,6 @@ const styles = StyleSheet.create({
   selectedFilter: { backgroundColor: burgundy },
   filterText: { color: "#58222A", fontSize: 14 },
   selectedFilterText: { color: "#FFFFFF", fontWeight: "700" },
-  wallet: {
-    padding: 13,
-    backgroundColor: "#F6E0DA",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#EFD6CB",
-  },
-  walletRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 9,
-    minHeight: 55,
-  },
-  walletIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#FFF0DF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  walletOutline: {
-    width: 27,
-    height: 21,
-    borderWidth: 2,
-    borderRadius: 4,
-    borderColor: burgundy,
-  },
-  walletClasp: {
-    position: "absolute",
-    right: -2,
-    top: 6,
-    width: 10,
-    height: 8,
-    borderWidth: 2,
-    borderColor: burgundy,
-    borderRadius: 3,
-  },
-  walletDetails: { flex: 1, minWidth: 125 },
-  walletTitle: { color: "#581421", fontSize: 16, fontWeight: "800" },
-  walletDescription: { color: "#735349", fontSize: 11, marginTop: 3 },
-  walletAmount: { color: burgundy, fontWeight: "800", fontSize: 21 },
-  chevron: { color: burgundy, fontSize: 29 },
-  topUp: {
-    backgroundColor: burgundy,
-    minHeight: 46,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 12,
-  },
-  topUpText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -616,7 +460,6 @@ const styles = StyleSheet.create({
   tripDetails: { flex: 1, minWidth: 155 },
   tripRoute: { color: "#2F1714", fontSize: 14, fontWeight: "700" },
   tripTime: { color: "#7B6256", fontSize: 12, marginTop: 4 },
-  tripFees: { color: "#74483E", fontSize: 11, marginTop: 4 },
   tripAmountRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -624,11 +467,30 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   tripAmount: { color: "#087C35", fontSize: 18, fontWeight: "800" },
+  chevron: { color: burgundy, fontSize: 29 },
+  center: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 30,
+    gap: 10,
+  },
+  centerText: { color: "#77675E", fontSize: 13 },
+  errorText: { color: "#A92D36", fontSize: 13, textAlign: "center" },
+  emptyText: { color: "#88766E", fontSize: 13, textAlign: "center" },
+  retry: {
+    minHeight: 44,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: burgundy,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
   demoNote: {
     textAlign: "center",
     color: "#A18B7D",
     fontSize: 10,
-    marginTop: 8,
+    marginTop: 12,
   },
   bottomNavigation: {
     flexDirection: "row",

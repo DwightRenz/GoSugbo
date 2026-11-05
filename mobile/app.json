@@ -35,7 +35,13 @@
           "imageWidth": 76
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GoSugbo uses your location to show customers where their rider is."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

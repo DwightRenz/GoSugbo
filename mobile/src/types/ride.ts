@@ -103,3 +103,21 @@ export type RideStatusBroadcast = {
   notes: string | null;
   timestamp: string;
 };
+
+/** Compact ride shape for the rider job board (backend: AvailableRideResponse).
+ *  Hides the customer's exact dropoff address — only the city is exposed. */
+export type AvailableRide = {
+  rideId: number;
+  status: RideStatus;
+  rideType: RideType | null;
+  pickup: AddressInfo | null;
+  dropoffCity: string | null;
+  pickupLat: number;
+  pickupLng: number;
+  dropoffLat: number;
+  dropoffLng: number;
+  estimatedDistanceKm: number | null;
+  estimatedDurationMin: number | null;
+  estimatedFare: number | null;
+  requestedAt: string;
+};

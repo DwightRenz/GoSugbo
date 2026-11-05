@@ -13,6 +13,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "@/components/gosugbo/back-arrow";
 import { ApiError } from "@/lib/api";
+import { formatPlace } from "@/lib/format";
 import {
   cancelRide,
   fetchRide,
@@ -44,12 +45,8 @@ export default function RideTrackingScreen() {
 
   const tracking = useRideTracking(rideId);
 
-  // Initial fetch + live status sync.
-  // No synchronous setState here — everything happens in .then/.catch/.finally.
   useEffect(() => {
     if (rideId == null) {
-      // Defer to a microtask so the compiler doesn't flag this as
-      // "synchronous setState in an effect body".
       void Promise.resolve().then(() => {
         setLoading(false);
         setError("Missing ride id.");
@@ -88,8 +85,6 @@ export default function RideTrackingScreen() {
     };
   }, [rideId]);
 
-  // When a live status arrives, refetch ride + history to get the latest fields.
-  // All setState calls are in .then callbacks — compiler-safe.
   useEffect(() => {
     if (rideId == null) return;
     if (!tracking.liveStatus || !ride) return;
@@ -102,8 +97,6 @@ export default function RideTrackingScreen() {
       .catch(() => {});
   }, [tracking.liveStatus, rideId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fit map to pickup/dropoff + rider when available.
-  // No setState here — this only calls mapRef methods.
   useEffect(() => {
     if (!ride) return;
     const points: { latitude: number; longitude: number }[] = [
@@ -223,6 +216,7 @@ export default function RideTrackingScreen() {
                   longitude: ride.pickupLng,
                 }}
                 title="Pickup"
+                description={formatPlace(ride.pickup, "Pickup")}
                 pinColor="#7D1E2B"
               />
               <Marker
@@ -231,6 +225,7 @@ export default function RideTrackingScreen() {
                   longitude: ride.dropoffLng,
                 }}
                 title="Destination"
+                description={formatPlace(ride.dropoff, "Destination")}
                 pinColor="#26734D"
               />
               {tracking.riderPosition && (
@@ -244,6 +239,14 @@ export default function RideTrackingScreen() {
           </View>
 
           <View style={styles.infoCard}>
+            <Row
+              label="Pickup"
+              value={formatPlace(ride.pickup, "Pinned location")}
+            />
+            <Row
+              label="Destination"
+              value={formatPlace(ride.dropoff, "Pinned location")}
+            />
             <Row label="Status" value={STATUS_LABEL[status]} />
             <Row
               label="Fare"
@@ -312,7 +315,9 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue}>{value}</Text>
+      <Text style={styles.rowValue} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -373,9 +378,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 4,
+    gap: 12,
   },
   rowLabel: { color: "#88766E", fontSize: 12 },
-  rowValue: { color: "#4C1C24", fontSize: 12, fontWeight: "600" },
+  rowValue: {
+    color: "#4C1C24",
+    fontSize: 12,
+    fontWeight: "600",
+    flexShrink: 1,
+    textAlign: "right",
+  },
   timelineRow: { color: "#4C1C24", fontSize: 11, lineHeight: 18 },
   cancelButton: {
     minHeight: 48,
