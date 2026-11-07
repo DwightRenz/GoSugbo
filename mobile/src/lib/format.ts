@@ -1,15 +1,10 @@
-// Plus Code (Open Location Code) — e.g. "2GG3+H5P", "2GC2+HXR, De Guzman Street"
+// ---------- existing ----------
 const PLUS_CODE_RE = /^[23456789CFGHJMPQRVWX]{4,}\+[23456789CFGHJMPQRVWX]{2,}/i;
 
 export function isPlusCode(s: string | null | undefined): boolean {
   return !!s && PLUS_CODE_RE.test(s.trim());
 }
 
-/**
- * Strip a leading Plus Code from a string, keeping any street part.
- *   "2GC2+HXR, De Guzman Street" → "De Guzman Street"
- *   "2GG3+H5P"                  → null
- */
 export function stripPlusCode(s: string | null | undefined): string | null {
   if (!s) return null;
   const trimmed = s.trim();
@@ -20,11 +15,6 @@ export function stripPlusCode(s: string | null | undefined): string | null {
   return rest || null;
 }
 
-/**
- * Best-effort human-readable place label.
- * Order: line1 (sanitized) → line2 → city → province → fallback.
- * Generic labels like "Pickup"/"Destination" are skipped.
- */
 export function formatPlace(
   addr:
     | {
@@ -46,4 +36,21 @@ export function formatPlace(
     if (c) return c;
   }
   return fallback;
+}
+
+// ---------- NEW ----------
+
+/** Format a number as ₱X.XX (or ₱X if whole). */
+export function formatPeso(amount: number | null | undefined): string {
+  if (amount == null || Number.isNaN(amount)) return "—";
+  const hasCents = Math.abs(amount % 1) > 0.001;
+  return hasCents ? `₱${amount.toFixed(2)}` : `₱${Math.round(amount)}`;
+}
+
+/** "4:35" / "0:07" — for the QR expiry countdown. */
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
 }

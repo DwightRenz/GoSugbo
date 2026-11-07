@@ -3,6 +3,7 @@ import MapView, { Marker } from "react-native-maps";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,12 +14,16 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "@/components/gosugbo/back-arrow";
 import { ApiError } from "@/lib/api";
-import { formatPlace } from "@/lib/format";
+import { formatPlace, formatPeso } from "@/lib/format";
 import {
   cancelRide,
   fetchRide,
   fetchRideHistory,
 } from "@/services/rideService";
+import {
+  initiateRideCheckout,
+  verifyRideCheckout,
+} from "@/services/paymentService";
 import { useRideTracking } from "@/hooks/use-ride-tracking";
 import type { Ride, RideStatus, RideStatusHistoryEntry } from "@/types/ride";
 
@@ -32,6 +37,8 @@ const STATUS_LABEL: Record<RideStatus, string> = {
   no_show: "No-show",
 };
 
+const POLL_MS = 3000;
+
 export default function RideTrackingScreen() {
   const params = useLocalSearchParams<{ rideId?: string }>();
   const rideId = params.rideId ? Number(params.rideId) : null;
@@ -41,6 +48,7 @@ export default function RideTrackingScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [paying, setPaying] = useState(false);
   const mapRef = useRef<MapView>(null);
 
   const tracking = useRideTracking(rideId);
@@ -97,6 +105,37 @@ export default function RideTrackingScreen() {
       .catch(() => {});
   }, [tracking.liveStatus, rideId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const payVisible =
+    !!ride &&
+    ride.status === "completed" &&
+    isOnlineMethod(ride.paymentMethod) &&
+    ride.paymentStatus !== "paid";
+
+  useEffect(() => {
+    if (!payVisible || !rideId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const fresh = await verifyRideCheckout(rideId);
+        if (!cancelled) setRide(fresh);
+      } catch {
+        if (!cancelled) {
+          void fetchRide(rideId)
+            .then((r) => {
+              if (!cancelled) setRide(r);
+            })
+            .catch(() => {});
+        }
+      }
+    };
+    void tick();
+    const t = setInterval(tick, POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [payVisible, rideId]);
+
   useEffect(() => {
     if (!ride) return;
     const points: { latitude: number; longitude: number }[] = [
@@ -143,6 +182,30 @@ export default function RideTrackingScreen() {
     ]);
   }
 
+  async function handlePay() {
+    if (!rideId || paying) return;
+    setPaying(true);
+    try {
+      const res = await initiateRideCheckout(rideId);
+      const opened = await Linking.canOpenURL(res.checkoutUrl);
+      if (!opened) {
+        Alert.alert(
+          "Cannot open checkout",
+          "Your device blocked opening the payment page. Please try again.",
+        );
+        return;
+      }
+      await Linking.openURL(res.checkoutUrl);
+    } catch (e) {
+      Alert.alert(
+        "Payment",
+        e instanceof ApiError ? e.displayMessage : "Could not start checkout.",
+      );
+    } finally {
+      setPaying(false);
+    }
+  }
+
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
@@ -166,6 +229,13 @@ export default function RideTrackingScreen() {
   }
 
   const status = tracking.liveStatus ?? ride.status;
+  const paymentStatus = ride.paymentStatus ?? null;
+  const paymentMethod = ride.paymentMethod ?? null;
+
+  const isOnline = isOnlineMethod(paymentMethod);
+  const showPayCard =
+    status === "completed" && isOnline && paymentStatus !== "paid";
+  const showPaidChip = status === "completed" && paymentStatus === "paid";
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -248,12 +318,8 @@ export default function RideTrackingScreen() {
               value={formatPlace(ride.dropoff, "Pinned location")}
             />
             <Row label="Status" value={STATUS_LABEL[status]} />
-            <Row
-              label="Fare"
-              value={
-                ride.fareAmount != null ? `₱${ride.fareAmount.toFixed(2)}` : "—"
-              }
-            />
+            <Row label="Fare" value={formatPeso(ride.fareAmount)} />
+            <Row label="Payment" value={isOnline ? "Online" : "Cash"} />
             <Row
               label="Distance"
               value={
@@ -279,6 +345,39 @@ export default function RideTrackingScreen() {
               </>
             )}
           </View>
+
+          {showPayCard && (
+            <View style={styles.payCard}>
+              <Text style={styles.payTitle}>Pay your fare</Text>
+              <Text style={styles.paySubtitle}>
+                You&apos;ll be taken to a secure payment page to complete the
+                payment.
+              </Text>
+              <Pressable
+                onPress={handlePay}
+                disabled={paying}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.payButton,
+                  (pressed || paying) && styles.pressed,
+                ]}>
+                {paying ?
+                  <ActivityIndicator color="#FFFFFF" />
+                : <Text style={styles.payButtonText}>
+                    Pay {formatPeso(ride.fareAmount)} now
+                  </Text>
+                }
+              </Pressable>
+            </View>
+          )}
+
+          {showPaidChip && (
+            <View style={styles.paidChip}>
+              <Text style={styles.paidChipText}>
+                ✓ Fare paid{paymentMethod === "cod" ? " in cash" : ""}
+              </Text>
+            </View>
+          )}
 
           {history.length > 0 && (
             <View style={styles.infoCard}>
@@ -308,6 +407,16 @@ export default function RideTrackingScreen() {
         </ScrollView>
       </View>
     </SafeAreaView>
+  );
+}
+
+function isOnlineMethod(method: string | null | undefined): boolean {
+  if (!method) return false;
+  return (
+    method === "gcash" ||
+    method === "maya" ||
+    method === "card" ||
+    method === "bank_transfer"
   );
 }
 
@@ -421,4 +530,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backHomeText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  payCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#E3CFB9",
+    padding: 16,
+    gap: 10,
+  },
+  payTitle: { color: "#4C1C24", fontSize: 15, fontWeight: "800" },
+  paySubtitle: { color: "#88766E", fontSize: 12, lineHeight: 18 },
+  payButton: {
+    marginTop: 4,
+    minHeight: 48,
+    borderRadius: 12,
+    backgroundColor: "#4C1C24",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  paidChip: {
+    alignSelf: "flex-start",
+    backgroundColor: "#E3F5E9",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#A8D9B8",
+  },
+  paidChipText: { color: "#087C35", fontSize: 12, fontWeight: "800" },
 });

@@ -44,7 +44,7 @@ public class Payment {
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
-    // NEW: store the PayMongo checkout session id for webhook lookups
+    /** PayMongo hosted-checkout session id (`cs_...`). Set by initiateCheckout. */
     @Column(name = "paymongo_checkout_id", length = 100)
     private String paymongoCheckoutId;
 

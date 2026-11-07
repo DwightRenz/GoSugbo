@@ -113,14 +113,20 @@ public final class OrderDtos {
             BigDecimal totalAmount,
             String notes,
             LocalDateTime placedAt,
-            LocalDateTime updatedAt) {
+            LocalDateTime updatedAt,
+            @Schema(allowableValues = {"pending","paid","failed","refunded"}) String paymentStatus) {
 
         public static OrderSummaryResponse from(Order o) {
+            return from(o, null);
+        }
+
+        public static OrderSummaryResponse from(Order o, Payment payment) {
             return new OrderSummaryResponse(
                     o.getOrderId(), o.getOrderCode(), o.getCustomerId(), o.getStoreId(),
                     o.getAddressId(), o.getRiderId(), o.getStatus().getValue(),
                     o.getSubtotal(), o.getDeliveryFee(), o.getDiscount(), o.getTotalAmount(),
-                    o.getNotes(), o.getPlacedAt(), o.getUpdatedAt());
+                    o.getNotes(), o.getPlacedAt(), o.getUpdatedAt(),
+                    payment == null ? null : payment.getStatus().getValue());
         }
     }
 
@@ -156,9 +162,9 @@ public final class OrderDtos {
         }
     }
 
-    // ------------------------------------------------------ NEW: PayMongo DTOs
+    // ------------------------------------------------------ PayMongo DTOs
 
-    @Schema(description = "Response containing the PayMongo checkout URL")
+    @Schema(description = "Response containing the PayMongo checkout URL (hosted)")
     public record CheckoutResponse(
             @Schema(example = "https://checkout.paymongo.com/abc123") String checkoutUrl,
             @Schema(example = "ORD-20261026-ABCD") String orderCode) {}

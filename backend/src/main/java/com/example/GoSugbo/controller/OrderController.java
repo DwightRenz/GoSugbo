@@ -190,13 +190,13 @@ public class OrderController {
     @PreAuthorize("hasAnyRole('ADMIN','STORE_OWNER')")
     @Operation(summary = "Update an order's status",
             description = "Store owner only. Transitions are validated against a state machine:\n"
-                    + "pending → confirmed|cancelled\n"
-                    + "confirmed → preparing|cancelled\n"
-                    + "preparing → ready_for_pickup|cancelled\n"
-                    + "ready_for_pickup → picked_up|cancelled\n"
-                    + "picked_up → in_transit\n"
-                    + "in_transit → delivered\n"
-                    + "delivered → refunded\n"
+                    + "pending -> confirmed|cancelled\n"
+                    + "confirmed -> preparing|cancelled\n"
+                    + "preparing -> ready_for_pickup|cancelled\n"
+                    + "ready_for_pickup -> picked_up|cancelled\n"
+                    + "picked_up -> in_transit\n"
+                    + "in_transit -> delivered\n"
+                    + "delivered -> refunded\n"
                     + "cancelled / refunded are terminal. Use PATCH /cancel for cancellations.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Status updated",

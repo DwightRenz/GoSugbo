@@ -46,6 +46,8 @@ export type CustomerInfo = {
   profileImage: string | null;
 };
 
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+
 export type Ride = {
   rideId: number;
   status: RideStatus;
@@ -69,6 +71,10 @@ export type Ride = {
   cancelledAt: string | null;
   cancellationReason: string | null;
   notes: string | null;
+  /** NEW — additive, may be null on older rides that never had a payment row */
+  paymentStatus?: PaymentStatus | null;
+  /** NEW */
+  paymentMethod?: string | null;
 };
 
 export type FareEstimate = {
@@ -104,8 +110,15 @@ export type RideStatusBroadcast = {
   timestamp: string;
 };
 
-/** Compact ride shape for the rider job board (backend: AvailableRideResponse).
- *  Hides the customer's exact dropoff address — only the city is exposed. */
+/** NEW — matches backend TrackingBroadcaster.paymentPaid() */
+export type RidePaymentBroadcast = {
+  rideId: number | null;
+  orderId: number | null;
+  status: "paid" | "failed";
+  timestamp: string;
+};
+
+/** Compact ride shape for the rider job board (backend: AvailableRideResponse). */
 export type AvailableRide = {
   rideId: number;
   status: RideStatus;

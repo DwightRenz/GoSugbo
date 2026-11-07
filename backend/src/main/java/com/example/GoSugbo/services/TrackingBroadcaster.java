@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -37,11 +39,25 @@ public class TrackingBroadcaster {
                 new StatusBroadcast(null, deliveryId, status, notes, LocalDateTime.now()));
     }
 
+    /** Fires when a payment is confirmed by webhook or poll. */
+    public void paymentPaid(Integer rideId, Integer orderId, String status) {
+        String channel = rideId != null
+                ? "/topic/rides/" + rideId + "/payment"
+                : "/topic/orders/" + orderId + "/payment";
+
+        Map<String, Object> payload = new HashMap<>();   // ← HashMap allows nulls
+        payload.put("rideId", rideId);
+        payload.put("orderId", orderId);
+        payload.put("status", status);
+        payload.put("timestamp", LocalDateTime.now().toString());
+
+        send(channel, payload);
+    }
+
     private void send(String destination, Object payload) {
         try {
             messaging.convertAndSend(destination, payload);
         } catch (Exception ex) {
-            // Broadcast must never break the primary request path
             log.warn("WS broadcast to {} failed: {}", destination, ex.getMessage());
         }
     }

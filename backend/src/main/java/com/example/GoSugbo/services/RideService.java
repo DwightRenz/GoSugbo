@@ -1,10 +1,12 @@
 package com.example.GoSugbo.services;
 
+import com.example.GoSugbo.dto.OrderDtos.CheckoutResponse;
 import com.example.GoSugbo.dto.RideDtos.*;
 import com.example.GoSugbo.entity.*;
 import com.example.GoSugbo.exception.ApiException;
 import com.example.GoSugbo.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -44,6 +46,10 @@ public class RideService {
     private final PaymentRepository payments;
     private final GoogleMapsService googleMapsService;
     private final TrackingBroadcaster trackingBroadcaster;
+    private final PayMongoService payMongoService;
+
+    @Value("${app.payments.success-url-base:mobile://ride/}")
+    private String successUrlBase;
 
     // ------------------------------------------------------------- pricing
 
@@ -118,6 +124,18 @@ public class RideService {
         ride.setNotes(blankToNull(req.notes()));
 
         Ride saved = rides.save(ride);
+
+        PaymentMethod chosen = resolvePaymentMethod(req.paymentMethod());
+        Payment payment = new Payment();
+        payment.setRideId(saved.getRideId());
+        payment.setMethod(chosen);
+        payment.setAmount(saved.getFareAmount());
+        payment.setStatus(PaymentStatus.PENDING);
+        if (chosen != PaymentMethod.COD) {
+            payment.setReferenceNo("RIDE-" + saved.getRideId());
+        }
+        payments.save(payment);
+
         log(saved.getRideId(), RideStatus.REQUESTED, customerId, "Ride requested");
         return build(saved);
     }
@@ -269,7 +287,13 @@ public class RideService {
                     p.setTotalDeliveries(p.getTotalDeliveries() + 1);
                     riders.save(p);
                 });
-                markRideCodPaid(ride);
+
+                payments.findByRideId(ride.getRideId()).ifPresent(p -> {
+                    p.setAmount(ride.getFareAmount());
+                    payments.save(p);
+                });
+
+                markRideCodPaidIfCod(ride);
             }
             case CANCELLED -> {
                 ride.setCancelledAt(LocalDateTime.now());
@@ -363,6 +387,105 @@ public class RideService {
                 .stream().map(RideStatusHistoryResponse::from).toList();
     }
 
+    // ------------------------------------------------- NEW: hosted checkout
+
+    @Transactional
+    public CheckoutResponse initiateCheckout(int customerId, int rideId) {
+        Ride ride = rides.findById(rideId)
+                .orElseThrow(() -> ApiException.notFound("Ride not found"));
+        if (!ride.getCustomerId().equals(customerId)) {
+            throw ApiException.forbidden("You do not have access to this ride");
+        }
+        if (ride.getStatus() != RideStatus.COMPLETED) {
+            throw ApiException.conflict("Ride must be completed before paying");
+        }
+        if (ride.getFareAmount() == null) {
+            throw ApiException.conflict("Ride has no fare to pay");
+        }
+
+        Payment payment = payments.findByRideId(rideId)
+                .orElseThrow(() -> ApiException.conflict("No payment record for this ride"));
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            throw ApiException.conflict("Ride is already paid");
+        }
+        if (payment.getMethod() == PaymentMethod.COD) {
+            throw ApiException.conflict("This ride was booked as cash. Online payment is not available.");
+        }
+        if (payment.getReferenceNo() == null) {
+            payment.setReferenceNo("RIDE-" + rideId);
+            payments.save(payment);
+        }
+
+        long amountInCentavos = ride.getFareAmount()
+                .multiply(BigDecimal.valueOf(100)).longValue();
+
+        String successUrl = successUrlBase + rideId;
+        String cancelUrl  = successUrlBase + rideId + "?cancelled=1";
+
+        PayMongoService.CheckoutResult result = payMongoService.createCheckoutSession(
+                payment.getReferenceNo(), amountInCentavos, successUrl, cancelUrl);
+
+        payment.setPaymongoCheckoutId(result.sessionId());
+        payments.save(payment);
+
+        return new CheckoutResponse(result.checkoutUrl(), payment.getReferenceNo());
+    }
+
+    /**
+     * Verifies the checkout session against PayMongo and marks the payment paid if it succeeded.
+     * Called by the frontend poll while the "Pay Now" button is visible.
+     */
+    @Transactional
+    public RideResponse verifyCheckout(int customerId, int rideId) {
+        Ride ride = rides.findById(rideId)
+                .orElseThrow(() -> ApiException.notFound("Ride not found"));
+        if (!ride.getCustomerId().equals(customerId)) {
+            throw ApiException.forbidden("You do not have access to this ride");
+        }
+
+        Payment payment = payments.findByRideId(rideId).orElse(null);
+        if (payment == null
+                || payment.getStatus() == PaymentStatus.PAID
+                || payment.getPaymongoCheckoutId() == null) {
+            return build(ride);
+        }
+
+        Map<String, Object> session = payMongoService.getCheckoutSession(payment.getPaymongoCheckoutId());
+        if (session == null) return build(ride);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> attrs = (Map<String, Object>) session.get("attributes");
+        if (attrs == null) return build(ride);
+
+        // PayMongo nests status at payment_intent.attributes.status (or payments[0].attributes.status).
+        String intentStatus = null;
+        Object paymentsRaw = attrs.get("payments");
+        if (paymentsRaw instanceof List<?> list && !list.isEmpty()
+                && list.get(0) instanceof Map<?, ?> first) {
+            Object firstAttrs = first.get("attributes");
+            if (firstAttrs instanceof Map<?, ?> fa && fa.get("status") instanceof String s) {
+                intentStatus = s;
+            }
+        }
+        if (intentStatus == null) {
+            Object intentRaw = attrs.get("payment_intent");
+            if (intentRaw instanceof Map<?, ?> intentMap
+                    && intentMap.get("attributes") instanceof Map<?, ?> ia
+                    && ia.get("status") instanceof String s) {
+                intentStatus = s;
+            }
+        }
+
+        if ("succeeded".equalsIgnoreCase(intentStatus) || "paid".equalsIgnoreCase(intentStatus)) {
+            payment.setStatus(PaymentStatus.PAID);
+            payment.setPaidAt(LocalDateTime.now());
+            payments.save(payment);
+            trackingBroadcaster.paymentPaid(rideId, null, "paid");
+        }
+
+        return build(ride);
+    }
+
     // --------------------------------------------------------------- helpers
 
     private RideResponse build(Ride r) {
@@ -395,13 +518,20 @@ public class RideService {
         Map<Integer, Address> addressById = addresses.findAllById(addressIds)
                 .stream().collect(Collectors.toMap(Address::getAddressId, Function.identity()));
 
+        Map<Integer, Payment> paymentByRideId = new HashMap<>();
+        for (Ride r : list) {
+            payments.findByRideId(r.getRideId())
+                    .ifPresent(p -> paymentByRideId.put(r.getRideId(), p));
+        }
+
         return list.stream().map(r -> RideResponse.from(
                 r, typeById.get(r.getRideTypeId()),
                 addressById.get(r.getPickupAddressId()),
                 addressById.get(r.getDropoffAddressId()),
                 userById.get(r.getCustomerId()),
                 r.getRiderId() == null ? null : userById.get(r.getRiderId()),
-                r.getRiderId() == null ? null : profileById.get(r.getRiderId())
+                r.getRiderId() == null ? null : profileById.get(r.getRiderId()),
+                paymentByRideId.get(r.getRideId())
         )).toList();
     }
 
@@ -423,26 +553,42 @@ public class RideService {
         history.save(h);
     }
 
-    private void markRideCodPaid(Ride ride) {
+    private void markRideCodPaidIfCod(Ride ride) {
         BigDecimal fare = ride.getFareAmount();
         if (fare == null) return;
 
-        payments.findByRideId(ride.getRideId()).ifPresentOrElse(p -> {
-            if (p.getMethod() == PaymentMethod.COD && p.getStatus() == PaymentStatus.PENDING) {
-                p.setAmount(fare);
-                p.setStatus(PaymentStatus.PAID);
-                p.setPaidAt(LocalDateTime.now());
-                payments.save(p);
-            }
-        }, () -> {
-            Payment p = new Payment();
-            p.setRideId(ride.getRideId());
-            p.setMethod(PaymentMethod.COD);
+        Payment p = payments.findByRideId(ride.getRideId()).orElse(null);
+        if (p == null) {
+            Payment fresh = new Payment();
+            fresh.setRideId(ride.getRideId());
+            fresh.setMethod(PaymentMethod.COD);
+            fresh.setAmount(fare);
+            fresh.setStatus(PaymentStatus.PAID);
+            fresh.setPaidAt(LocalDateTime.now());
+            payments.save(fresh);
+            return;
+        }
+
+        if (PaymentMethod.COD.equals(p.getMethod())
+                && p.getStatus() == PaymentStatus.PENDING) {
             p.setAmount(fare);
             p.setStatus(PaymentStatus.PAID);
             p.setPaidAt(LocalDateTime.now());
             payments.save(p);
-        });
+        }
+    }
+
+    private static PaymentMethod resolvePaymentMethod(String raw) {
+        if (raw == null || raw.isBlank()) return PaymentMethod.COD;
+        String v = raw.trim().toLowerCase(Locale.ROOT);
+        if ("online".equals(v) || "gcash".equals(v) || "maya".equals(v)) {
+            return PaymentMethod.GCASH;
+        }
+        try {
+            return PaymentMethod.fromValue(v);
+        } catch (IllegalArgumentException ex) {
+            return PaymentMethod.COD;
+        }
     }
 
     private static double haversineKm(double lat1, double lng1, double lat2, double lng2) {

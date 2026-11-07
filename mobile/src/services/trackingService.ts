@@ -1,7 +1,10 @@
 import { Client, type IMessage } from "@stomp/stompjs";
 import { API_URL } from "@/lib/config";
-import { tokenStorage } from "@/lib/storage";
-import type { RideLocationBroadcast, RideStatusBroadcast } from "@/types/ride";
+import type {
+  RideLocationBroadcast,
+  RidePaymentBroadcast,
+  RideStatusBroadcast,
+} from "@/types/ride";
 
 /**
  * Builds a WebSocket URL from the REST API base.
@@ -16,15 +19,18 @@ function wsUrl(): string {
 export type RideTrackingHandlers = {
   onLocation: (data: RideLocationBroadcast) => void;
   onStatus: (data: RideStatusBroadcast) => void;
+  /** NEW — fires on /topic/rides/{id}/payment. Optional; old callers unaffected. */
+  onPayment?: (data: RidePaymentBroadcast) => void;
   onError?: (message: string) => void;
   onConnected?: () => void;
 };
 
 /**
- * Connects to the STOMP broker and subscribes to a ride's location/status topics.
+ * Connects to the STOMP broker and subscribes to a ride's
+ * location / status / payment topics.
  * Returns a handle with a `disconnect()` method. Call it on unmount.
  *
- * Note: the backend STOMP endpoint is not currently authenticated at the
+ * Note: the backend STOMP endpoint is not authenticated at the
  * handshake level (WebSocketConfig permits all origins). If you later add
  * STOMP auth, pass the bearer token via connectHeaders.
  */
@@ -37,7 +43,7 @@ export function subscribeToRide(
     reconnectDelay: 5000,
     heartbeatIncoming: 10000,
     heartbeatOutgoing: 10000,
-    debug: () => {}, // silence; set to console.log to troubleshoot
+    debug: () => {},
   });
 
   client.onConnect = () => {
@@ -54,6 +60,15 @@ export function subscribeToRide(
     client.subscribe(`/topic/rides/${rideId}/status`, (msg: IMessage) => {
       try {
         handlers.onStatus(JSON.parse(msg.body));
+      } catch {
+        /* ignore */
+      }
+    });
+
+    // NEW
+    client.subscribe(`/topic/rides/${rideId}/payment`, (msg: IMessage) => {
+      try {
+        handlers.onPayment?.(JSON.parse(msg.body));
       } catch {
         /* ignore */
       }

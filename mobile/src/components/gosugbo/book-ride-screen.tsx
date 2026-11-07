@@ -27,6 +27,7 @@ import type { FareEstimate, RideType } from "@/types/ride";
 
 export type Coordinates = { latitude: number; longitude: number };
 type LocationType = "pickup" | "destination";
+type PaymentChoice = "cod" | "online";
 
 const FALLBACK_TYPES = [
   {
@@ -75,8 +76,6 @@ function iconFor(key: "motorbike" | "tricycle4" | "tricycle6") {
   }
 }
 
-/** Build a readable address label from an expo-location reverse geocode result.
- *  Skips Plus Codes entirely (Android sometimes puts them in `name`/`street`). */
 function buildAddressLabel(
   geo: Location.LocationGeocodedAddress | undefined,
   fallbackCoords: Coordinates,
@@ -97,7 +96,6 @@ function buildAddressLabel(
   return `${fallbackCoords.latitude.toFixed(5)}, ${fallbackCoords.longitude.toFixed(5)}`;
 }
 
-/** Build the fields we save to /api/addresses. */
 function buildAddressFields(
   geo: Location.LocationGeocodedAddress | undefined,
   fallbackCoords: Coordinates,
@@ -148,6 +146,8 @@ export default function BookRideScreen() {
 
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState("");
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("cod");
 
   useEffect(() => {
     let active = true;
@@ -397,6 +397,7 @@ export default function BookRideScreen() {
         rideTypeId: selectedRideTypeId,
         pickupAddressId: pickupAddress.id,
         dropoffAddressId: dropoffAddress.id,
+        paymentMethod: paymentMethod,
       });
 
       router.replace({
@@ -436,7 +437,7 @@ export default function BookRideScreen() {
             onPress={() =>
               Alert.alert(
                 "Book a ride",
-                "Choose pickup and destination, pick a vehicle, then tap Book.",
+                "Choose pickup and destination, pick a vehicle and payment method, then tap Book.",
               )
             }>
             <View style={styles.helpCircle}>
@@ -635,6 +636,65 @@ export default function BookRideScreen() {
                 {typesError}
               </Text>
             )}
+          </View>
+
+          <View style={styles.vehiclePanel}>
+            <Text style={styles.panelTitle}>Payment</Text>
+
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ checked: paymentMethod === "cod" }}
+              onPress={() => setPaymentMethod("cod")}
+              style={({ pressed }) => [
+                styles.vehicleOption,
+                paymentMethod === "cod" && styles.selectedVehicle,
+                pressed && styles.pressed,
+              ]}>
+              <View style={styles.vehicleDetails}>
+                <Text
+                  style={[
+                    styles.vehicleTitle,
+                    paymentMethod === "cod" && styles.whiteText,
+                  ]}>
+                  Cash (pay the rider)
+                </Text>
+                <Text
+                  style={[
+                    styles.vehicleDescription,
+                    paymentMethod === "cod" && styles.selectedDescription,
+                  ]}>
+                  Pay the fare directly when you arrive.
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ checked: paymentMethod === "online" }}
+              onPress={() => setPaymentMethod("online")}
+              style={({ pressed }) => [
+                styles.vehicleOption,
+                paymentMethod === "online" && styles.selectedVehicle,
+                { marginBottom: 0 },
+                pressed && styles.pressed,
+              ]}>
+              <View style={styles.vehicleDetails}>
+                <Text
+                  style={[
+                    styles.vehicleTitle,
+                    paymentMethod === "online" && styles.whiteText,
+                  ]}>
+                  Pay online after the ride
+                </Text>
+                <Text
+                  style={[
+                    styles.vehicleDescription,
+                    paymentMethod === "online" && styles.selectedDescription,
+                  ]}>
+                  You&apos;ll be redirected to a secure payment page.
+                </Text>
+              </View>
+            </Pressable>
           </View>
 
           <View style={styles.safetyNote}>

@@ -44,8 +44,6 @@ public class OrderService {
     private final ProductRepository products;
     private final AddressRepository addresses;
     private final StoreService storeService;
-
-    // NEW: PayMongo integration
     private final PayMongoService payMongoService;
 
     // ------------------------------------------------------------------ create
@@ -147,7 +145,7 @@ public class OrderService {
     @Transactional(readOnly = true)
     public Page<OrderSummaryResponse> listMine(int customerId, Pageable pageable) {
         return orders.findByCustomerIdOrderByPlacedAtDesc(customerId, pageable)
-                .map(OrderSummaryResponse::from);
+                .map(o -> OrderSummaryResponse.from(o, payments.findByOrderId(o.getOrderId()).orElse(null)));
     }
 
     @Transactional(readOnly = true)
@@ -168,7 +166,7 @@ public class OrderService {
         Page<Order> page = (status == null)
                 ? orders.findByStoreIdOrderByPlacedAtDesc(storeId, pageable)
                 : orders.findByStoreIdAndStatusOrderByPlacedAtDesc(storeId, status, pageable);
-        return page.map(OrderSummaryResponse::from);
+        return page.map(o -> OrderSummaryResponse.from(o, payments.findByOrderId(o.getOrderId()).orElse(null)));
     }
 
     // ------------------------------------------------------------- state moves
@@ -193,7 +191,7 @@ public class OrderService {
 
         order.setStatus(next);
         Order saved = orders.save(order);
-        return OrderSummaryResponse.from(saved);
+        return OrderSummaryResponse.from(saved, payments.findByOrderId(orderId).orElse(null));
     }
 
     // ------------------------------------------------------------------ cancel
@@ -203,7 +201,6 @@ public class OrderService {
         Order order = require(orderId);
 
         boolean isCustomer = order.getCustomerId().equals(callerId);
-        // Non-throwing ownership check — safe inside this transaction
         boolean isStoreOwner = storeService.isOwner(callerId, order.getStoreId());
         if (!isCustomer && !isStoreOwner) {
             throw ApiException.forbidden("You do not have access to this order");
@@ -227,10 +224,11 @@ public class OrderService {
         }
 
         order.setStatus(OrderStatus.CANCELLED);
-        return OrderSummaryResponse.from(orders.save(order));
+        Order saved = orders.save(order);
+        return OrderSummaryResponse.from(saved, payments.findByOrderId(orderId).orElse(null));
     }
 
-    // --------------------------------------------------------- NEW: PayMongo
+    // ------------------------------------------------- hosted checkout (UPDATED)
 
     @Transactional
     public CheckoutResponse initiatePayMongoCheckout(int customerId, int orderId,
@@ -254,29 +252,15 @@ public class OrderService {
         long amountInCentavos = order.getTotalAmount()
                 .multiply(BigDecimal.valueOf(100)).longValue();
 
-        String checkoutUrl = payMongoService.createCheckoutSession(
-                order.getOrderCode(), amountInCentavos, successUrl, cancelUrl
-        );
+        PayMongoService.CheckoutResult result = payMongoService.createCheckoutSession(
+                order.getOrderCode(), amountInCentavos, successUrl, cancelUrl);
 
         payment.setReferenceNo(order.getOrderCode());
         payment.setMethod(PaymentMethod.CARD);
+        payment.setPaymongoCheckoutId(result.sessionId());
         payments.save(payment);
 
-        return new CheckoutResponse(checkoutUrl, order.getOrderCode());
-    }
-
-    @Transactional
-    public void markPaymentPaidByReference(String referenceNo) {
-        payments.findAll().stream()
-                .filter(p -> referenceNo.equals(p.getReferenceNo()))
-                .findFirst()
-                .ifPresent(p -> {
-                    if (p.getStatus() == PaymentStatus.PENDING) {
-                        p.setStatus(PaymentStatus.PAID);
-                        p.setPaidAt(java.time.LocalDateTime.now());
-                        payments.save(p);
-                    }
-                });
+        return new CheckoutResponse(result.checkoutUrl(), order.getOrderCode());
     }
 
     // ---------------------------------------------------------------- helpers

@@ -1,5 +1,6 @@
 package com.example.GoSugbo.controller;
 
+import com.example.GoSugbo.dto.OrderDtos.CheckoutResponse;
 import com.example.GoSugbo.dto.RideDtos.*;
 import com.example.GoSugbo.services.RideService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,8 +29,6 @@ public class RideController {
 
     private final RideService rideService;
 
-    // ---------------------------------------------------------- public-ish
-
     @GetMapping("/types")
     @Operation(summary = "List available ride types and their pricing")
     public List<RideTypeResponse> types() {
@@ -54,12 +53,11 @@ public class RideController {
         return rideService.nearbyRiders(lat, lng, vehicleType, radiusKm);
     }
 
-    // ---------------------------------------------------------- customer
-
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('CUSTOMER')")
-    @Operation(summary = "Book a ride")
+    @Operation(summary = "Book a ride",
+            description = "paymentMethod: 'cod' (default) for cash, 'online' for hosted checkout after the ride.")
     public RideResponse book(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
                              @Valid @RequestBody CreateRideRequest req) {
         return rideService.book(AddressController.currentUserId(jwt), req);
@@ -94,8 +92,6 @@ public class RideController {
                 AddressController.currentUserId(jwt), false, id, req);
     }
 
-    // ------------------------------------------------- customer + rider + admin
-
     @GetMapping("/{id}")
     @Operation(summary = "Get a ride by id",
             description = "Visible to the customer, the assigned rider, and admins.")
@@ -114,5 +110,29 @@ public class RideController {
         int callerId = AddressController.currentUserId(jwt);
         boolean isAdmin = "ADMIN".equalsIgnoreCase(jwt.getClaimAsString("role"));
         return rideService.history(callerId, isAdmin, id);
+    }
+
+    // ------------------------------------------------- NEW: hosted checkout
+
+    @PostMapping("/{id}/pay")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Create a PayMongo hosted-checkout session for a completed ride",
+            description = "Returns { checkoutUrl, orderCode }. The customer's app opens checkoutUrl "
+                    + "in the browser; PayMongo handles the UI. Confirmation is delivered by webhook "
+                    + "or by polling the /pay/verify endpoint.")
+    public CheckoutResponse pay(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                @PathVariable Integer id) {
+        return rideService.initiateCheckout(AddressController.currentUserId(jwt), id);
+    }
+
+    @PostMapping("/{id}/pay/verify")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Verify payment status against PayMongo",
+            description = "Called by the app poll. Queries the checkout session, and if the "
+                    + "payment intent succeeded, marks the payment paid and returns the "
+                    + "updated ride with paymentStatus='paid'.")
+    public RideResponse verifyPay(@Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+                                  @PathVariable Integer id) {
+        return rideService.verifyCheckout(AddressController.currentUserId(jwt), id);
     }
 }

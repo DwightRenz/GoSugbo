@@ -28,6 +28,8 @@ export function bookRide(input: {
   pickupAddressId: number;
   dropoffAddressId: number;
   notes?: string;
+  /** 'cod' (default) for cash, 'online' for hosted checkout after the ride. */
+  paymentMethod?: "cod" | "cash" | "online";
 }) {
   return request<Ride>("/api/rides", {
     method: "POST",

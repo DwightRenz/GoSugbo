@@ -19,11 +19,15 @@ import java.util.Map;
 public class PayMongoService {
 
     private final WebClient payMongoWebClient;
+
     @Value("${paymongo.secret-key}")
     private String secretKey;
 
-    public String createCheckoutSession(String orderCode, long amountInCentavos, String successUrl, String cancelUrl) {
-        String auth = Base64.getEncoder().encodeToString((secretKey + ":").getBytes(StandardCharsets.UTF_8));
+    public record CheckoutResult(String checkoutUrl, String sessionId) {}
+
+    public CheckoutResult createCheckoutSession(String reference, long amountInCentavos,
+                                                String successUrl, String cancelUrl) {
+        String auth = basicAuth();
 
         Map<String, Object> body = Map.of(
                 "data", Map.of(
@@ -31,13 +35,14 @@ public class PayMongoService {
                                 "line_items", List.of(Map.of(
                                         "currency", "PHP",
                                         "amount", amountInCentavos,
-                                        "name", "Order " + orderCode,
+                                        "name", "Payment for " + reference,
                                         "quantity", 1
                                 )),
                                 "payment_method_types", List.of("card", "gcash", "paymaya", "grab_pay"),
                                 "success_url", successUrl,
                                 "cancel_url", cancelUrl,
-                                "description", "Payment for " + orderCode,
+                                "description", "Payment for " + reference,
+                                "reference_number", reference,
                                 "send_email_receipt", false,
                                 "show_description", true,
                                 "show_line_items", true
@@ -63,10 +68,36 @@ public class PayMongoService {
             }
             Map data = (Map) response.get("data");
             Map attributes = (Map) data.get("attributes");
-            return (String) attributes.get("checkout_url");
+            String checkoutUrl = (String) attributes.get("checkout_url");
+            String sessionId = (String) data.get("id");
 
+            return new CheckoutResult(checkoutUrl, sessionId);
+        } catch (ApiException e) {
+            throw e;
         } catch (Exception e) {
             throw ApiException.conflict("Failed to create PayMongo checkout: " + e.getMessage());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCheckoutSession(String checkoutSessionId) {
+        String auth = basicAuth();
+        try {
+            Map response = payMongoWebClient.get()
+                    .uri("/checkout_sessions/" + checkoutSessionId)
+                    .header(HttpHeaders.AUTHORIZATION, "Basic " + auth)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+            if (response == null) return null;
+            return (Map<String, Object>) response.get("data");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String basicAuth() {
+        return Base64.getEncoder().encodeToString(
+                (secretKey + ":").getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -18,15 +18,22 @@ public final class RideDtos {
             BigDecimal dropoffLat, BigDecimal dropoffLng
     ) {}
 
+    /**
+     * Book a ride. The customer's payment choice is captured here:
+     *   paymentMethod = "cod" | "cash"  → cash on delivery
+     *   paymentMethod = "online"        → QR Ph after the ride
+     * Omitting it defaults to COD for backward compatibility.
+     */
     public record CreateRideRequest(
             Integer rideTypeId,
             Integer pickupAddressId,
             Integer dropoffAddressId,
-            String notes
+            String notes,
+            String paymentMethod
     ) {}
 
     public record UpdateRideStatusRequest(
-            String status,     // accepted | arrived_pickup | in_progress | completed | cancelled | no_show
+            String status,
             String notes,
             BigDecimal actualDistanceKm
     ) {}
@@ -110,11 +117,20 @@ public final class RideDtos {
             LocalDateTime completedAt,
             LocalDateTime cancelledAt,
             String cancellationReason,
-            String notes
+            String notes,
+            String paymentStatus,
+            String paymentMethod
     ) {
         public static RideResponse from(Ride r, RideType type,
                                         Address pickup, Address dropoff,
                                         User customer, User riderUser, RiderProfile riderProfile) {
+            return from(r, type, pickup, dropoff, customer, riderUser, riderProfile, null);
+        }
+
+        public static RideResponse from(Ride r, RideType type,
+                                        Address pickup, Address dropoff,
+                                        User customer, User riderUser, RiderProfile riderProfile,
+                                        Payment payment) {
             return new RideResponse(
                     r.getRideId(),
                     r.getStatus().getValue(),
@@ -129,11 +145,12 @@ public final class RideDtos {
                     RiderInfo.from(riderUser, riderProfile),
                     r.getRequestedAt(), r.getAcceptedAt(), r.getPickupAt(),
                     r.getCompletedAt(), r.getCancelledAt(),
-                    r.getCancellationReason(), r.getNotes());
+                    r.getCancellationReason(), r.getNotes(),
+                    payment == null ? null : payment.getStatus().getValue(),
+                    payment == null ? null : payment.getMethod().getValue());
         }
     }
 
-    /** Compact shape for the rider job board — hides the customer's exact address. */
     public record AvailableRideResponse(
             Integer rideId,
             String status,
