@@ -85,4 +85,16 @@ public class Ride {
 
     @Column(columnDefinition = "text")
     private String notes;
+
+    // ------------------------------------------------ NEW: rider rating
+
+    /** 1..5 stars, null until the customer rates the rider. */
+    @Column(name = "rider_rating")
+    private Integer riderRating;
+
+    @Column(name = "rider_rating_comment", length = 500)
+    private String riderRatingComment;
+
+    @Column(name = "rider_rated_at")
+    private LocalDateTime riderRatedAt;
 }

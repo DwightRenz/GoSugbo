@@ -92,6 +92,18 @@ public class RideController {
                 AddressController.currentUserId(jwt), false, id, req);
     }
 
+    @PostMapping("/{id}/rate")
+    @PreAuthorize("hasRole('CUSTOMER')")
+    @Operation(summary = "Rate the rider after a completed ride",
+            description = "Stars 1–5. Only the customer who booked the ride may rate, "
+                    + "only once the ride is COMPLETED, and only once per ride.")
+    public RideResponse rate(
+            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Integer id,
+            @Valid @RequestBody RateRideRequest req) {
+        return rideService.rateRider(AddressController.currentUserId(jwt), id, req);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get a ride by id",
             description = "Visible to the customer, the assigned rider, and admins.")

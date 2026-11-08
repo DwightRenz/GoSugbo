@@ -40,6 +40,10 @@ public class RiderProfile {
     @Column(name = "rating_avg", nullable = false, precision = 3, scale = 2)
     private BigDecimal ratingAvg = BigDecimal.ZERO;
 
+    // NEW — number of ratings averaged into ratingAvg
+    @Column(name = "rating_count", nullable = false)
+    private int ratingCount = 0;
+
     @Column(name = "total_deliveries", nullable = false)
     private int totalDeliveries = 0;
 }

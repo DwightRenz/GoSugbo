@@ -249,7 +249,18 @@ export default function RiderHomeScreen() {
   const tripsValue = loading ? "…" : String(stats?.todayTrips ?? 0);
   const earningsValue =
     loading ? "…" : `₱${(stats?.todayEarnings ?? 0).toFixed(0)}`;
-  const ratingValue = "4.9 ★";
+  const ratingValue = (() => {
+    if (loading) return "…";
+    const avg = stats?.ratingAvg ?? 0;
+    const count = stats?.ratingCount ?? 0;
+    if (!count || avg <= 0) return "—";
+    return `${avg.toFixed(1)} ★`;
+  })();
+
+  const ratingSubLabel =
+    !stats || stats.ratingCount === 0 ?
+      "No ratings yet"
+    : `${stats.ratingCount} rating${stats.ratingCount === 1 ? "" : "s"}`;
 
   return (
     <SafeAreaView style={s.screen}>
@@ -330,6 +341,11 @@ export default function RiderHomeScreen() {
               </View>
             ))}
           </View>
+
+          <Text style={s.ratingNote}>
+            Rating: {ratingValue}
+            {stats && stats.ratingCount > 0 ? ` · ${ratingSubLabel}` : ""}
+          </Text>
 
           <View style={s.grid}>
             {shortcuts.map((item) => (
@@ -436,8 +452,7 @@ export default function RiderHomeScreen() {
             )}
           </View>
           <Text style={s.demo}>
-            Live trips, earnings, requests, ride flow & tracking · Rating is a
-            placeholder
+            Live trips, earnings, requests, ride flow, tracking & ratings
           </Text>
         </ScrollView>
 
@@ -575,7 +590,7 @@ const s = StyleSheet.create({
     backgroundColor: "#702832",
     borderRadius: 20,
     paddingVertical: 18,
-    marginBottom: 17,
+    marginBottom: 8,
   },
   stat: { flex: 1, alignItems: "center", paddingHorizontal: 4 },
   statBorder: { borderLeftWidth: 1, borderLeftColor: "#BC8B7A" },
@@ -592,6 +607,13 @@ const s = StyleSheet.create({
     fontSize: 26,
     fontWeight: "800",
     marginTop: 6,
+  },
+  ratingNote: {
+    color: "#8B766B",
+    fontSize: 11,
+    textAlign: "right",
+    marginBottom: 12,
+    paddingRight: 4,
   },
   icon: { width: "100%", height: "100%", maxWidth: 30, maxHeight: 30 },
   symbol: { fontSize: 36, lineHeight: 39 },

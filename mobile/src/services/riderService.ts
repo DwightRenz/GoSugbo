@@ -10,6 +10,8 @@ export type RiderProfile = {
   currentLat: number | null;
   currentLng: number | null;
   ratingAvg: number | null;
+  /** NEW — number of ratings averaged into ratingAvg */
+  ratingCount: number;
   totalDeliveries: number;
 };
 
@@ -87,6 +89,8 @@ export type RiderStats = {
   todayTrips: number;
   todayEarnings: number;
   ratingAvg: number | null;
+  /** NEW — number of ratings that produced ratingAvg */
+  ratingCount: number;
   totalCompleted: number;
 };
 
@@ -118,10 +122,11 @@ export function computeRiderStats(
     }
   }
 
-  return {
+ return {
     todayTrips,
     todayEarnings,
     ratingAvg: profile?.ratingAvg ?? null,
+    ratingCount: profile?.ratingCount ?? 0, // NEW
     totalCompleted,
   };
 }

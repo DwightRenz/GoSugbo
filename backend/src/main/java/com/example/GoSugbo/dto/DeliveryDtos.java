@@ -165,6 +165,8 @@ public final class DeliveryDtos {
             BigDecimal currentLat,
             BigDecimal currentLng,
             BigDecimal ratingAvg,
+            // NEW
+            int ratingCount,
             int totalDeliveries) {
 
         public static RiderProfileResponse from(RiderProfile p) {
@@ -172,7 +174,9 @@ public final class DeliveryDtos {
                     p.getRiderId(), p.isAvailable(),
                     p.getVehicleType() == null ? null : p.getVehicleType().getValue(),
                     p.getPlateNumber(), p.getCurrentLat(), p.getCurrentLng(),
-                    p.getRatingAvg(), p.getTotalDeliveries());
+                    p.getRatingAvg(),
+                    p.getRatingCount(),          // NEW
+                    p.getTotalDeliveries());
         }
     }
 }

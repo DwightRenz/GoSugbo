@@ -13,12 +13,14 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "@/components/gosugbo/back-arrow";
+import RatingModal from "@/components/gosugbo/rating-modal";
 import { ApiError } from "@/lib/api";
 import { formatPlace, formatPeso } from "@/lib/format";
 import {
   cancelRide,
   fetchRide,
   fetchRideHistory,
+  rateRider,
 } from "@/services/rideService";
 import {
   initiateRideCheckout,
@@ -50,6 +52,10 @@ export default function RideTrackingScreen() {
   const [cancelling, setCancelling] = useState(false);
   const [paying, setPaying] = useState(false);
   const mapRef = useRef<MapView>(null);
+
+  // -------- rating modal state (NEW) --------
+  const [ratingDismissed, setRatingDismissed] = useState(false);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
 
   const tracking = useRideTracking(rideId);
 
@@ -156,6 +162,14 @@ export default function RideTrackingScreen() {
     return ride.status === "requested" || ride.status === "accepted";
   }, [ride]);
 
+  // -------- show the rating modal only when it makes sense (NEW) --------
+  const showRatingModal =
+    !!ride &&
+    ride.status === "completed" &&
+    !!ride.rider &&
+    ride.riderRating == null &&
+    !ratingDismissed;
+
   async function handleCancel() {
     if (!ride || !canCancel || cancelling) return;
     Alert.alert("Cancel ride?", "The rider will be notified.", [
@@ -203,6 +217,26 @@ export default function RideTrackingScreen() {
       );
     } finally {
       setPaying(false);
+    }
+  }
+
+  async function handleSubmitRating(stars: number, comment: string) {
+    if (!ride) return;
+    setRatingSubmitting(true);
+    try {
+      const updated = await rateRider(ride.rideId, {
+        rating: stars,
+        comment,
+      });
+      setRide(updated);
+      Alert.alert("Thanks!", "Your rating has been submitted.");
+    } catch (e) {
+      Alert.alert(
+        "Rating",
+        e instanceof ApiError ? e.displayMessage : "Could not submit rating.",
+      );
+    } finally {
+      setRatingSubmitting(false);
     }
   }
 
@@ -344,6 +378,14 @@ export default function RideTrackingScreen() {
                 )}
               </>
             )}
+            {ride.riderRating != null && (
+              <Row
+                label="Your rating"
+                value={`${"★".repeat(ride.riderRating)}${"☆".repeat(
+                  5 - ride.riderRating,
+                )}`}
+              />
+            )}
           </View>
 
           {showPayCard && (
@@ -405,6 +447,14 @@ export default function RideTrackingScreen() {
             </Pressable>
           )}
         </ScrollView>
+
+        <RatingModal
+          visible={showRatingModal}
+          riderName={ride.rider?.fullName ?? null}
+          submitting={ratingSubmitting}
+          onSubmit={handleSubmitRating}
+          onSkip={() => setRatingDismissed(true)}
+        />
       </View>
     </SafeAreaView>
   );

@@ -71,10 +71,12 @@ export type Ride = {
   cancelledAt: string | null;
   cancellationReason: string | null;
   notes: string | null;
-  /** NEW — additive, may be null on older rides that never had a payment row */
   paymentStatus?: PaymentStatus | null;
-  /** NEW */
   paymentMethod?: string | null;
+  /** NEW — 1..5, null if not yet rated */
+  riderRating?: number | null;
+  riderRatingComment?: string | null;
+  riderRatedAt?: string | null;
 };
 
 export type FareEstimate = {

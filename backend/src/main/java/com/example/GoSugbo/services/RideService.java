@@ -313,6 +313,57 @@ public class RideService {
         return build(saved);
     }
 
+    // ------------------------------------------------- NEW: rider rating
+
+    @Transactional
+    public RideResponse rateRider(int customerId, int rideId, RateRideRequest req) {
+        if (req.rating() == null || req.rating() < 1 || req.rating() > 5) {
+            throw ApiException.badRequest("Rating must be between 1 and 5");
+        }
+
+        Ride ride = rides.findByIdForUpdate(rideId)
+                .orElseThrow(() -> ApiException.notFound("Ride not found"));
+
+        if (!ride.getCustomerId().equals(customerId)) {
+            throw ApiException.forbidden("You can only rate your own ride");
+        }
+        if (ride.getStatus() != RideStatus.COMPLETED) {
+            throw ApiException.conflict("You can only rate a completed ride");
+        }
+        if (ride.getRiderId() == null) {
+            throw ApiException.conflict("This ride has no rider to rate");
+        }
+        if (ride.getRiderRating() != null) {
+            throw ApiException.conflict("You already rated this ride");
+        }
+
+        ride.setRiderRating(req.rating());
+        ride.setRiderRatingComment(blankToNull(req.comment()));
+        ride.setRiderRatedAt(LocalDateTime.now());
+        Ride saved = rides.save(ride);
+
+        // Recompute denormalized rider aggregate (avg AND count).
+        Object[] agg = rides.aggregateRiderRating(saved.getRiderId());
+        if (agg != null && agg.length >= 2) {
+            Object avgObj = agg[0];
+            Object countObj = agg[1];
+            BigDecimal avg = avgObj == null
+                    ? BigDecimal.ZERO
+                    : BigDecimal.valueOf(((Number) avgObj).doubleValue())
+                    .setScale(2, RoundingMode.HALF_UP);
+            int count = countObj == null ? 0 : ((Number) countObj).intValue();
+            riders.findById(saved.getRiderId()).ifPresent(p -> {
+                p.setRatingAvg(avg);
+                p.setRatingCount(count);
+                riders.save(p);
+            });
+        }
+
+        trackingBroadcaster.rideStatus(saved.getRideId(),
+                saved.getStatus().getValue(), "Customer rated the ride");
+        return build(saved);
+    }
+
     // --------------------------------------------------- rider GPS for ride
 
     @Transactional

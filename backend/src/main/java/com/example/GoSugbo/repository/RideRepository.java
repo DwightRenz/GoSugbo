@@ -56,4 +56,9 @@ public interface RideRepository extends JpaRepository<Ride, Integer> {
             @Param("vehicleType") String vehicleType,
             @Param("minLat") double minLat, @Param("maxLat") double maxLat,
             @Param("minLng") double minLng, @Param("maxLng") double maxLng);
+
+    /** NEW — returns [avg(Double|null), count(Long)] for the given rider. */
+    @Query("select avg(r.riderRating), count(r.riderRating) from Ride r " +
+            "where r.riderId = :riderId and r.riderRating is not null")
+    Object[] aggregateRiderRating(@Param("riderId") Integer riderId);
 }

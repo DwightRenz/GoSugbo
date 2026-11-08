@@ -108,3 +108,14 @@ export function createAddress(input: CreateAddressInput) {
     },
   });
 }
+
+export function rateRider(
+  rideId: number,
+  input: { rating: number; comment?: string },
+) {
+  return request<Ride>(`/api/rides/${rideId}/rate`, {
+    method: "POST",
+    auth: true,
+    body: { rating: input.rating, comment: input.comment ?? "" },
+  });
+}

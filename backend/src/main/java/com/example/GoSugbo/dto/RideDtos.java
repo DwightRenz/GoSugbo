@@ -119,7 +119,11 @@ public final class RideDtos {
             String cancellationReason,
             String notes,
             String paymentStatus,
-            String paymentMethod
+            String paymentMethod,
+            // NEW -------------------------------------------------
+            Integer riderRating,
+            String riderRatingComment,
+            LocalDateTime riderRatedAt
     ) {
         public static RideResponse from(Ride r, RideType type,
                                         Address pickup, Address dropoff,
@@ -147,7 +151,10 @@ public final class RideDtos {
                     r.getCompletedAt(), r.getCancelledAt(),
                     r.getCancellationReason(), r.getNotes(),
                     payment == null ? null : payment.getStatus().getValue(),
-                    payment == null ? null : payment.getMethod().getValue());
+                    payment == null ? null : payment.getMethod().getValue(),
+                    r.getRiderRating(),
+                    r.getRiderRatingComment(),
+                    r.getRiderRatedAt());
         }
     }
 
@@ -198,4 +205,13 @@ public final class RideDtos {
                     h.getNotes(), h.getCreatedAt());
         }
     }
+
+    // ------------------------------------------------------ NEW: rating
+    public record RateRideRequest(
+            @jakarta.validation.constraints.Min(1)
+            @jakarta.validation.constraints.Max(5)
+            Integer rating,
+            @jakarta.validation.constraints.Size(max = 500)
+            String comment
+    ) {}
 }
