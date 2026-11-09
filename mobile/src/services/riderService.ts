@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { request } from "@/lib/api";
 import { formatPlace } from "@/lib/format";
 import type { AvailableRide, Ride } from "@/types/ride";
@@ -10,9 +11,13 @@ export type RiderProfile = {
   currentLat: number | null;
   currentLng: number | null;
   ratingAvg: number | null;
-  /** NEW — number of ratings averaged into ratingAvg */
   ratingCount: number;
   totalDeliveries: number;
+  /** Cloudinary URL to the rider's avatar (null if not set) */
+  profileImage: string | null;
+  fullName?: string;
+  email?: string;
+  phone?: string | null;
 };
 
 type Page<T> = {
@@ -89,7 +94,6 @@ export type RiderStats = {
   todayTrips: number;
   todayEarnings: number;
   ratingAvg: number | null;
-  /** NEW — number of ratings that produced ratingAvg */
   ratingCount: number;
   totalCompleted: number;
 };
@@ -122,11 +126,11 @@ export function computeRiderStats(
     }
   }
 
- return {
+  return {
     todayTrips,
     todayEarnings,
     ratingAvg: profile?.ratingAvg ?? null,
-    ratingCount: profile?.ratingCount ?? 0, // NEW
+    ratingCount: profile?.ratingCount ?? 0,
     totalCompleted,
   };
 }
@@ -161,4 +165,52 @@ export function selectCompletedTrips(rides: Ride[]): EarningsTrip[] {
       (a, b) =>
         new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
     );
+}
+
+// -------------------------------------------------------- profile picture
+
+/**
+ * Upload / replace the rider's profile picture.
+ *
+ * Why this shape:
+ *   - `expo-image-picker` returns a `file://…` URI. `fetch(file://…)` on
+ *     Android resolves against the Metro dev-server origin → 404. So we
+ *     read it via expo-file-system's `File` class instead.
+ *   - RN 0.81+ / Expo SDK 54+ removed the legacy `{ uri, name, type }`
+ *     file-part object from FormData ("Unsupported FormDataPart implementation"),
+ *     so we must send a real Blob-like value.
+ *   - `File` in expo-file-system is `implements Blob` at the type level and
+ *     is accepted directly by `FormData.append(..., File, filename)` on
+ *     Expo SDK 54+. There is no `.blob()` method in this version, so we
+ *     pass the `File` instance itself.
+ *
+ * The mobile side does not need an explicit `Content-Type` header — `fetch`
+ * sets it with the multipart boundary automatically when the body is a
+ * `FormData` instance (see `api.ts`).
+ */
+export async function uploadRiderProfilePicture(input: {
+  uri: string;
+  mimeType?: string | null;
+  fileName?: string | null;
+}) {
+  const file = new File(input.uri);
+
+  if (!file.exists) {
+    throw new Error(
+      `The selected image is no longer available at ${input.uri}. ` +
+        `Pick the photo again.`,
+    );
+  }
+
+  const form = new FormData();
+  // `File` is Blob-compatible in expo-file-system 19+. Do NOT call .blob() —
+  // that method was removed in this version. Pass the File itself.
+  form.append("file", file as unknown as Blob, input.fileName ?? "profile.jpg");
+
+  return request<RiderProfile>("/api/riders/me/profile-picture", {
+    method: "POST",
+    auth: true,
+    formData: form,
+    timeoutMs: 30000,
+  });
 }

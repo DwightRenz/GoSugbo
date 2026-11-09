@@ -14,13 +14,19 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
 import { useAuth } from "@/context/AuthContext";
 import { useRiderStats } from "@/hooks/use-rider-stats";
 import { useAvailableRides } from "@/hooks/use-available-rides";
 import { useActiveRide } from "@/hooks/use-active-ride";
 import { useRiderLocationPush } from "@/hooks/use-rider-location-push";
-import { fetchMyRiderProfile, setAvailability } from "@/services/riderService";
+import {
+  fetchMyRiderProfile,
+  setAvailability,
+  uploadRiderProfilePicture,
+} from "@/services/riderService";
 import LogoutButton from "./logout-button";
+import RiderAvatar from "./rider-avatar";
 
 const ink = "#621B28";
 const images = {
@@ -128,21 +134,28 @@ export default function RiderHomeScreen() {
   const [panel, setPanel] = useState<string | null>(null);
   const [available, setAvailable] = useState(true);
 
+  // NEW — profile picture state, kept in sync with the backend profile
+  const [profileImage, setProfileImage] = useState<string | null>(
+    user?.profileImage ?? null,
+  );
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
   const board = useAvailableRides(online);
   const active = useActiveRide(online);
 
-  // Stream GPS to the backend while there's an active ride.
   useRiderLocationPush(
     active.ride?.rideId ?? null,
     active.ride?.status ?? null,
   );
 
-  // Sync the toggle with the backend's actual availability on mount.
+  // Sync availability + profile picture from the backend on mount.
   useEffect(() => {
     let alive = true;
     fetchMyRiderProfile()
       .then((p) => {
-        if (alive) setOnline(p.available);
+        if (!alive) return;
+        setOnline(p.available);
+        setProfileImage(p.profileImage ?? null);
       })
       .catch(() => {});
     return () => {
@@ -195,7 +208,6 @@ export default function RiderHomeScreen() {
       if (active.error) Alert.alert("Ride update failed", active.error);
       return;
     }
-    // Completion changes the stats — re-fetch them.
     if (updated.status === "completed") {
       refresh();
       board.refresh();
@@ -206,6 +218,46 @@ export default function RiderHomeScreen() {
     refresh();
     board.refresh();
     active.refresh();
+  }
+
+  // NEW — pick & upload a new avatar.
+  async function onChangeAvatar() {
+    if (uploadingAvatar) return;
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        "Permission needed",
+        "Allow photo access to choose a profile picture.",
+      );
+      return;
+    }
+
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (picked.canceled || picked.assets.length === 0) return;
+
+    const asset = picked.assets[0];
+    setUploadingAvatar(true);
+    try {
+      const updated = await uploadRiderProfilePicture({
+        uri: asset.uri,
+        mimeType: asset.mimeType ?? "image/jpeg",
+        fileName: asset.fileName ?? "profile.jpg",
+      });
+      setProfileImage(updated.profileImage ?? null);
+    } catch (e: any) {
+      Alert.alert(
+        "Could not upload picture",
+        e?.message ?? "Please try again.",
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
   }
 
   // ----- Card content -----
@@ -245,7 +297,6 @@ export default function RiderHomeScreen() {
   const showAdvance = !!activeRide && !!action;
   const busy = active.updating || board.accepting;
 
-  // ----- Stats -----
   const tripsValue = loading ? "…" : String(stats?.todayTrips ?? 0);
   const earningsValue =
     loading ? "…" : `₱${(stats?.todayEarnings ?? 0).toFixed(0)}`;
@@ -261,6 +312,10 @@ export default function RiderHomeScreen() {
     !stats || stats.ratingCount === 0 ?
       "No ratings yet"
     : `${stats.ratingCount} rating${stats.ratingCount === 1 ? "" : "s"}`;
+
+  const initials =
+    `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? ""}`.toUpperCase() ||
+    "R";
 
   return (
     <SafeAreaView style={s.screen}>
@@ -491,31 +546,66 @@ export default function RiderHomeScreen() {
                 <Text style={s.viewAllText}>Close</Text>
               </Pressable>
             </View>
-            <Text style={s.sheetText}>
-              {panel === "Earnings" ?
-                `Today’s earnings: ₱${(stats?.todayEarnings ?? 0).toFixed(2)} from ${stats?.todayTrips ?? 0} trips.`
-              : panel === "My Schedule" ?
-                "Set your availability for today."
-              : panel === "Profile" || panel === "My Account" ?
-                `${user?.firstName ?? "Rider"} ${user?.lastName ?? ""}\n${user?.email ?? ""}\nVehicle and document management will appear here when connected.`
-              : "Ride details will appear here."}
-            </Text>
-            {panel === "My Schedule" && (
-              <View style={s.availability}>
-                <Text style={s.sheetText}>Available today</Text>
-                <Switch
-                  accessibilityLabel="Available today"
-                  value={available}
-                  onValueChange={setAvailable}
-                  trackColor={{ true: ink, false: "#D8CBC4" }}
-                />
-              </View>
-            )}
-            {(panel === "Profile" || panel === "My Account") && (
-              <View style={s.logout}>
-                <LogoutButton />
-              </View>
-            )}
+
+            {panel === "Profile" || panel === "My Account" ?
+              <>
+                <View style={s.avatarRow}>
+                  <RiderAvatar
+                    uri={profileImage}
+                    initials={initials}
+                    size={96}
+                    onPress={onChangeAvatar}
+                    disabled={uploadingAvatar}
+                  />
+                  <View style={s.avatarMeta}>
+                    <Text style={s.avatarName}>
+                      {user?.firstName ?? "Rider"} {user?.lastName ?? ""}
+                    </Text>
+                    <Text style={s.avatarEmail}>{user?.email ?? ""}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={onChangeAvatar}
+                      disabled={uploadingAvatar}
+                      style={({ pressed }) => [
+                        s.changePhotoBtn,
+                        uploadingAvatar && s.disabled,
+                        pressed && s.pressed,
+                      ]}>
+                      {uploadingAvatar ?
+                        <ActivityIndicator size="small" color={ink} />
+                      : <Text style={s.changePhotoText}>Change picture</Text>}
+                    </Pressable>
+                  </View>
+                </View>
+                <Text style={[s.sheetText, { marginTop: 14 }]}>
+                  Vehicle and document management will appear here when
+                  connected.
+                </Text>
+                <View style={s.logout}>
+                  <LogoutButton />
+                </View>
+              </>
+            : panel === "Earnings" ?
+              <Text style={s.sheetText}>
+                Today’s earnings: ₱{(stats?.todayEarnings ?? 0).toFixed(2)} from{" "}
+                {stats?.todayTrips ?? 0} trips.
+              </Text>
+            : panel === "My Schedule" ?
+              <>
+                <Text style={s.sheetText}>
+                  Set your availability for today.
+                </Text>
+                <View style={s.availability}>
+                  <Text style={s.sheetText}>Available today</Text>
+                  <Switch
+                    accessibilityLabel="Available today"
+                    value={available}
+                    onValueChange={setAvailable}
+                    trackColor={{ true: ink, false: "#D8CBC4" }}
+                  />
+                </View>
+              </>
+            : <Text style={s.sheetText}>Ride details will appear here.</Text>}
           </SafeAreaView>
         </View>
       </Modal>
@@ -786,4 +876,25 @@ const s = StyleSheet.create({
     marginTop: 20,
   },
   logout: { height: 80, marginTop: 16 },
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 6,
+  },
+  avatarMeta: { flex: 1, minWidth: 0 },
+  avatarName: { color: ink, fontSize: 17, fontWeight: "800" },
+  avatarEmail: { color: "#8B766B", fontSize: 13, marginTop: 2 },
+  changePhotoBtn: {
+    alignSelf: "flex-start",
+    marginTop: 10,
+    minHeight: 38,
+    paddingHorizontal: 14,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: ink,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  changePhotoText: { color: ink, fontSize: 13, fontWeight: "700" },
 });

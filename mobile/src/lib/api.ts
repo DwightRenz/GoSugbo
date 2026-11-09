@@ -42,6 +42,8 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  /** FormData for multipart uploads. Do NOT set Content-Type manually. */
+  formData?: FormData;
   /** Attach the stored access token. */
   auth?: boolean;
   /** Use this token instead of the stored one. */
@@ -56,6 +58,7 @@ export async function request<T>(
   const {
     method = "GET",
     body,
+    formData,
     auth = false,
     token,
     timeoutMs = 15000,
@@ -70,12 +73,19 @@ export async function request<T>(
 
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "bypass-tunnel-reminder": "true", // localtunnel: skip the reminder page
+    "bypass-tunnel-reminder": "true",
   };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // Only set JSON content-type for JSON bodies; for FormData the runtime
+  // sets it with the correct multipart boundary automatically.
+  if (body !== undefined && !formData)
+    headers["Content-Type"] = "application/json";
 
   const bearer = token ?? (auth ? await tokenStorage.get() : null);
   if (bearer) headers.Authorization = `Bearer ${bearer}`;
+
+  if (formData && !(formData instanceof FormData)) {
+    throw new ApiError(0, "formData option must be a FormData instance.");
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -85,14 +95,31 @@ export async function request<T>(
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body:
+        formData ? (formData as any)
+        : body !== undefined ? JSON.stringify(body)
+        : undefined,
       signal: controller.signal,
     });
-  } catch {
+  } catch (err: any) {
+    // No routine console.log — only the returned ApiError carries the message
+    // so callers can show a helpful alert.
+    if (controller.signal.aborted) {
+      throw new ApiError(
+        0,
+        `Upload timed out after ${Math.round(timeoutMs / 1000)}s. Check your connection and try again.`,
+      );
+    }
+    if (err instanceof TypeError && /network/i.test(err.message)) {
+      throw new ApiError(
+        0,
+        `Cannot reach the API at ${API_URL}. If you're on the web, this is usually a CORS issue — check the browser console for a preflight (OPTIONS) failure.`,
+      );
+    }
     throw new ApiError(
       0,
-      controller.signal.aborted ?
-        "The server took too long to respond. Please try again."
+      err?.message ?
+        `Upload failed: ${err.message}`
       : "Cannot reach the server. Check your internet connection and the API URL.",
     );
   } finally {
