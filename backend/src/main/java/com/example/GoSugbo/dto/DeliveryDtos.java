@@ -159,23 +159,41 @@ public final class DeliveryDtos {
     @Schema(description = "Rider's own profile / status")
     public record RiderProfileResponse(
             Integer riderId,
+            // NEW — Cloudinary avatar URL, null if not set
+            String profileImage,
+            // NEW — populated from User row for the "My Account" sheet
+            String fullName,
+            String email,
+            String phone,
             boolean available,
             String vehicleType,
             String plateNumber,
             BigDecimal currentLat,
             BigDecimal currentLng,
             BigDecimal ratingAvg,
-            // NEW
             int ratingCount,
             int totalDeliveries) {
 
+        /** Convenience overload for places that only have the profile (profileImage etc. become null). */
         public static RiderProfileResponse from(RiderProfile p) {
+            return from(p, null);
+        }
+
+        /** Preferred factory: includes the linked User so profileImage/name/email/phone are populated. */
+        public static RiderProfileResponse from(RiderProfile p, User u) {
             return new RiderProfileResponse(
-                    p.getRiderId(), p.isAvailable(),
+                    p.getRiderId(),
+                    u == null ? null : u.getProfileImage(),
+                    u == null ? null : u.getFullName(),
+                    u == null ? null : u.getEmail(),
+                    u == null ? null : u.getPhone(),
+                    p.isAvailable(),
                     p.getVehicleType() == null ? null : p.getVehicleType().getValue(),
-                    p.getPlateNumber(), p.getCurrentLat(), p.getCurrentLng(),
+                    p.getPlateNumber(),
+                    p.getCurrentLat(),
+                    p.getCurrentLng(),
                     p.getRatingAvg(),
-                    p.getRatingCount(),          // NEW
+                    p.getRatingCount(),
                     p.getTotalDeliveries());
         }
     }

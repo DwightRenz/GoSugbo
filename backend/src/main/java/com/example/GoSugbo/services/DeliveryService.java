@@ -48,7 +48,7 @@ public class DeliveryService {
     private final AddressRepository addresses;
     private final StoreService storeService;
     private final RideRepository rides;
-    private final TrackingBroadcaster trackingBroadcaster;   // NEW
+    private final TrackingBroadcaster trackingBroadcaster;
 
     // ------------------------------------------------------- available orders
 
@@ -249,7 +249,9 @@ public class DeliveryService {
             throw ApiException.conflict("Finish your active ride before going offline");
         }
         p.setAvailable(available);
-        return RiderProfileResponse.from(riders.save(p));
+        RiderProfile saved = riders.save(p);
+        // CHANGED — include the User row so profileImage etc. stay populated
+        return RiderProfileResponse.from(saved, users.findById(riderId).orElse(null));
     }
 
     @Transactional
@@ -260,19 +262,22 @@ public class DeliveryService {
         p.setCurrentLng(req.lng());
         RiderProfile saved = riders.save(p);
 
-        // NEW: push to the active delivery's subscribers, if any
+        // push to the active delivery's subscribers, if any
         deliveries.findFirstByRiderIdAndStatusInOrderByCreatedAtDesc(riderId, ACTIVE)
                 .ifPresent(d -> trackingBroadcaster.deliveryLocation(
                         d.getDeliveryId(), riderId, req.lat(), req.lng()));
 
-        return RiderProfileResponse.from(saved);
+        // CHANGED — include the User row so profileImage etc. stay populated
+        return RiderProfileResponse.from(saved, users.findById(riderId).orElse(null));
     }
 
     @Transactional(readOnly = true)
     public RiderProfileResponse getProfile(int riderId) {
-        return riders.findById(riderId)
-                .map(RiderProfileResponse::from)
+        // CHANGED — load both the profile and the user, and pass both to the factory
+        RiderProfile p = riders.findById(riderId)
                 .orElseThrow(() -> ApiException.notFound("Rider profile not found"));
+        User u = users.findById(riderId).orElse(null);
+        return RiderProfileResponse.from(p, u);
     }
 
     // ---------------------------------------------------------------- helpers
@@ -367,5 +372,14 @@ public class DeliveryService {
 
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    @Transactional
+    public RiderProfileResponse updateProfilePicture(int riderId, String newUrl) {
+        User u = users.findById(riderId)
+                .orElseThrow(() -> ApiException.notFound("User not found"));
+        u.setProfileImage(newUrl);
+        users.save(u);
+        return getProfile(riderId);
     }
 }

@@ -38,7 +38,11 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties({JwtProperties.class, GoogleMapsProperties.class})
+@EnableConfigurationProperties({
+        JwtProperties.class,
+        GoogleMapsProperties.class,
+        CloudinaryProperties.class    // <-- ADDED
+})
 public class SecurityConfig {
 
     @Bean
@@ -50,7 +54,6 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // --- public auth endpoints
                         // --- public auth endpoints
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/login",
@@ -142,7 +145,12 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "bypass-tunnel-reminder"));
+        // CHANGED — allow every header so multipart/form-data preflight succeeds cleanly.
+        config.setAllowedHeaders(List.of("*"));
+        // CHANGED — expose every response header (useful for debugging uploads).
+        config.setExposedHeaders(List.of("*"));
+        // CHANGED — bearer-token auth, so cookies are not needed.
+        config.setAllowCredentials(false);
         config.setMaxAge(3600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
