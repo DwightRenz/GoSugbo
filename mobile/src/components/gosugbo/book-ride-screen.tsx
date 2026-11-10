@@ -11,6 +11,8 @@ import {
   StyleSheet,
   Text,
   View,
+  Keyboard,
+ TextInput,
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -36,7 +38,7 @@ const FALLBACK_TYPES = [
     description: "1 passenger · Motorcycle ride",
     summary: "1 passenger · Helmet provided",
     rideTypeId: null as number | null,
-    icon: require("../../../assets/home/single-motor-pin.png") as number,
+    icon: require("../../../assets/home/Motorcycle.png") as number,
   },
   {
     id: "tricycle4",
@@ -68,7 +70,7 @@ function iconKeyForRideType(
 function iconFor(key: "motorbike" | "tricycle4" | "tricycle6") {
   switch (key) {
     case "motorbike":
-      return require("../../../assets/home/single-motor-pin.png");
+      return require("../../../assets/home/Motorcycle.png");
     case "tricycle4":
       return require("../../../assets/home/tricycle-4.png");
     case "tricycle6":
@@ -113,12 +115,72 @@ function buildAddressFields(
 }
 
 export default function BookRideScreen() {
+
+async function searchPlace() {
+  const query = searchText.trim();
+  if (!query || searching) return;
+
+  Keyboard.dismiss();
+  setSearching(true);
+  setSearchError("");
+
+  try {
+    // Android requires location permission for geocoding.
+    const permission =
+      await Location.requestForegroundPermissionsAsync();
+
+    if (permission.status !== "granted") {
+      setSearchError(
+        "Allow location access to search, or choose a spot on the map.",
+      );
+      return;
+    }
+
+    // Include the city/province in the input for better results.
+    // Example: "Panagsama Beach, Moalboal, Cebu"
+    const results = await Location.geocodeAsync(query);
+    const place = results[0];
+
+    if (!place) {
+      setSearchError(
+        "No location found. Try adding the city or province.",
+      );
+      return;
+    }
+
+    const coordinates = {
+      latitude: place.latitude,
+      longitude: place.longitude,
+    };
+
+    pickerCenter.current = coordinates;
+
+    pickerMapRef.current?.animateToRegion(
+      {
+        ...coordinates,
+        latitudeDelta: 0.008,
+        longitudeDelta: 0.008,
+      },
+      400,
+    );
+  } catch {
+    setSearchError(
+      "Could not search right now. Try again or drag the map.",
+    );
+  } finally {
+    setSearching(false);
+  }
+}
   const [pickup, setPickup] = useState("");
   const [pickupCoords, setPickupCoords] = useState<Coordinates | null>(null);
   const [destination, setDestination] = useState("");
   const [destinationCoords, setDestinationCoords] =
     useState<Coordinates | null>(null);
   const [locationError, setLocationError] = useState("");
+  const pickerMapRef = useRef<MapView>(null);
+const [searchText, setSearchText] = useState("");
+const [searching, setSearching] = useState(false);
+const [searchError, setSearchError] = useState("");
 
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [selecting, setSelecting] = useState<LocationType>("destination");
@@ -332,6 +394,8 @@ export default function BookRideScreen() {
   const displayMinutes = estimate?.estimatedDurationMin ?? null;
 
   function openMapPicker(type: LocationType) {
+      setSearchText("");
+    setSearchError("");
     setSelecting(type);
     pickerCenter.current = (type === "pickup" ? pickupCoords : (
       destinationCoords

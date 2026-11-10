@@ -102,7 +102,7 @@ export default function RiderEarningsScreen() {
               <Text style={styles.logo}>GoSugbo·</Text>
               <View style={styles.riderBadge}>
                 <Image
-                  source={require("../../assets/home/single-motor-pin.png")}
+                  source={require("../../assets/home/Motorcycle.png")}
                   style={styles.badgeImage}
                   resizeMode="contain"
                 />
@@ -288,7 +288,7 @@ function TripCard({ trip }: { trip: EarningsTrip }) {
       style={({ pressed }) => [styles.tripCard, pressed && styles.pressed]}>
       <View style={styles.tripIcon}>
         <Image
-          source={require("../../assets/home/single-motor-pin.png")}
+          source={require("../../assets/home/Motorcycle.png")}
           style={styles.motorcycle}
           resizeMode="contain"
           accessible={false}

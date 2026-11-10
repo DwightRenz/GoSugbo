@@ -341,19 +341,16 @@ export default function RiderAuthScreen({ mode }: RiderAuthScreenProps) {
         loading={busy}
       />
 
-      <Pressable
-        onPress={() =>
-          router.replace(signup ? "/rider-login" : "/rider-signup")
-        }
-        accessibilityRole="button"
-        style={styles.switchButton}>
-        <Text style={styles.switchText}>
-          {signup ? "Already a GoSugbo rider? " : "New to GoSugbo riders? "}
-          <Text style={styles.bold}>
-            {signup ? "Log in" : "Create an account"}
+      {signup && (
+        <Pressable
+          onPress={() => router.replace("/rider-login")}
+          accessibilityRole="button"
+          style={styles.switchButton}>
+          <Text style={styles.switchText}>
+            Already a GoSugbo rider? <Text style={styles.bold}>Log in</Text>
           </Text>
-        </Text>
-      </Pressable>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={() => router.replace("/login")}

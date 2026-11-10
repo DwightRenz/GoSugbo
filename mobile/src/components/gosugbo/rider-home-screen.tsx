@@ -31,7 +31,7 @@ import ChatButton from "./chat-button"; // NEW
 
 const ink = "#621B28";
 const images = {
-  ride: require("../../../assets/home/single-motor-pin.png"),
+  ride: require("../../../assets/home/Motorcycle.png"),
   pin: require("../../../assets/home/map-pin.png"),
   receipt: require("../../../assets/home/orders-pin.png"),
   profile: require("../../../assets/home/profile-pin.png"),

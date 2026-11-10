@@ -13,20 +13,21 @@ import { useAuth } from "@/context/AuthContext";
 import LogoutButton from "./logout-button"; // ← NEW
 
 const icons = {
-  rightArrow: require("../../../assets/home/right-arrow.png"),
+  rightArrow: require("../../../assets/home/Right_Arrow.png"),
   location: require("../../../assets/home/map-pin.png"),
-  ride: require("../../../assets/home/single-motor-pin.png"),
-  food: require("../../../assets/home/food-pin.png"),
-  orders: require("../../../assets/home/orders-pin.png"),
-  inbox: require("../../../assets/home/inbox-pin.png"),
-  profile: require("../../../assets/home/profile-pin.png"),
+  ride: require("../../../assets/home/Motorcycle.png"),
+  food: require("../../../assets/home/Food.png"),
+  orders: require("../../../assets/home/Orders.png"),
+  home: require("../../../assets/home/Home.png"),
+  favorites: require("../../../assets/home/Favorites.png"),
+  menu: require("../../../assets/home/Menu.png"),
 };
 
 const tabs = [
-  { name: "Home", icon: null },
+  { name: "Home", icon: icons.home },
   { name: "Orders", icon: icons.orders },
-  { name: "Inbox", icon: icons.inbox },
-  { name: "Profile", icon: icons.profile },
+  { name: "Favorites", icon: icons.favorites },
+  { name: "Menu", icon: icons.menu },
 ];
 
 export default function HomeScreen() {
@@ -68,11 +69,9 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
-
-          {/* ← NEW: title + logout on the same row */}
           <View style={styles.titleRow}>
             <Text style={styles.logo}>
-              GoSugbo<Text style={styles.logoDot}>·</Text>
+              <Text style={styles.logoGo}>Go</Text><Text style={styles.logoSugbo}>Sugbo</Text><Text style={styles.logoDot}>.</Text>
             </Text>
             <LogoutButton />
           </View>
@@ -92,8 +91,6 @@ export default function HomeScreen() {
                 styles.rideCard,
                 pressed && styles.pressed,
               ]}>
-              <View pointerEvents="none" style={styles.cardGlow} />
-              <View pointerEvents="none" style={styles.rideWave} />
               <View style={styles.serviceIcon}>
                 <Image
                   source={icons.ride}
@@ -110,14 +107,6 @@ export default function HomeScreen() {
               <Text style={[styles.serviceDescription, styles.whiteText]}>
                 Around Cebu, with ease
               </Text>
-              <View style={styles.cardArrow}>
-                <Image
-                  source={icons.rightArrow}
-                  style={styles.arrowImage}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-              </View>
             </Pressable>
 
             <Pressable
@@ -128,8 +117,6 @@ export default function HomeScreen() {
                 styles.foodCard,
                 pressed && styles.pressed,
               ]}>
-              <View pointerEvents="none" style={styles.foodGlow} />
-              <View pointerEvents="none" style={styles.foodWave} />
               <View style={styles.serviceIcon}>
                 <Image
                   source={icons.food}
@@ -144,14 +131,6 @@ export default function HomeScreen() {
               <Text style={styles.serviceDescription}>
                 Local flavors, to your door
               </Text>
-              <View style={styles.cardArrow}>
-                <Image
-                  source={icons.rightArrow}
-                  style={styles.arrowImage}
-                  resizeMode="contain"
-                  accessible={false}
-                />
-              </View>
             </Pressable>
           </View>
 
@@ -249,18 +228,12 @@ export default function HomeScreen() {
                     styles.navigationIcon,
                     selected && styles.activeNavigationIcon,
                   ]}>
-                  {item.icon ?
-                    <Image
-                      source={item.icon}
-                      style={styles.navigationImage}
-                      resizeMode="contain"
-                      accessible={false}
-                    />
-                  : <View style={styles.homeIcon}>
-                      <View style={styles.homeRoof} />
-                      <View style={styles.homeBase} />
-                    </View>
-                  }
+                  <Image
+                    source={item.icon}
+                    style={styles.navigationImage}
+                    resizeMode="contain"
+                    accessible={false}
+                  />
                 </View>
 
                 <Text
@@ -389,35 +362,9 @@ const styles = StyleSheet.create({
   foodArrow: { color: "#FFFFFF", fontSize: 26, lineHeight: 30 },
   sectionHeading: { flexDirection: "row", alignItems: "center", gap: 9 },
   sectionImage: { width: 23, height: 23 },
-  homeIcon: {
-    width: 23,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "flex-end",
-  },
-  homeRoof: {
-    position: "absolute",
-    top: 2,
-    width: 16,
-    height: 16,
-    borderTopWidth: 2,
-    borderLeftWidth: 2,
-    borderColor: "#7D1E2B",
-    transform: [{ rotate: "45deg" }],
-    borderTopLeftRadius: 3,
-  },
-  homeBase: {
-    width: 21,
-    height: 17,
-    borderWidth: 2,
-    borderTopWidth: 0,
-    borderColor: "#7D1E2B",
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
-  },
   screen: {
     flex: 1,
-    backgroundColor: "#FFF3E8",
+    backgroundColor: "#F4EADD",
   },
   container: {
     flex: 1,
@@ -440,14 +387,14 @@ const styles = StyleSheet.create({
   },
 
   logo: {
-    color: "#AD342E",
+    color: "#4B1B22",
     fontSize: 34,
     fontWeight: "800",
     letterSpacing: -1,
   },
-  logoDot: {
-    color: "#A64B3D",
-  },
+  logoGo: { color: "#A44A3F" },
+  logoSugbo: { color: "#4B1B22" },
+  logoDot: { color: "#A44A3F" },
   location: {
     flexDirection: "row",
     alignItems: "center",
@@ -489,27 +436,27 @@ const styles = StyleSheet.create({
   },
   serviceCard: {
     flex: 1,
-    minHeight: 215,
-    borderRadius: 24,
-    padding: 17,
+    minHeight: 156,
+    borderRadius: 16,
+    padding: 16,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "#FFFFFF80",
   },
   rideCard: {
-    backgroundColor: "#922E34",
+    backgroundColor: "#A84A3D",
   },
   foodCard: {
-    backgroundColor: "#F2CDA0",
+    backgroundColor: "#D2B48C",
   },
   serviceIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     backgroundColor: "#FFF9F3",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   iconImage: {
     width: 32,
@@ -610,10 +557,9 @@ const styles = StyleSheet.create({
   bottomNavigation: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    marginHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E6D5C3",
     marginTop: 8,
-    marginBottom: 10,
     paddingTop: 11,
     paddingBottom: 10,
     boxShadow: "0 8px 28px rgba(109, 56, 31, 0.07)",
