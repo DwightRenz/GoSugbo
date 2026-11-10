@@ -27,6 +27,7 @@ function RootNavigator() {
           for the user's role (customer vs rider). */}
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="home" />
+        <Stack.Screen name="chat" />
       </Stack.Protected>
 
       {/* Signed-in: customer-only screens */}

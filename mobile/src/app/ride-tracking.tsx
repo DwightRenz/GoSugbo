@@ -28,6 +28,7 @@ import {
 } from "@/services/paymentService";
 import { useRideTracking } from "@/hooks/use-ride-tracking";
 import type { Ride, RideStatus, RideStatusHistoryEntry } from "@/types/ride";
+import ChatButton from "@/components/gosugbo/chat-button";
 
 const STATUS_LABEL: Record<RideStatus, string> = {
   requested: "Looking for a rider…",
@@ -378,6 +379,20 @@ export default function RideTrackingScreen() {
                 )}
               </>
             )}
+            {/* Chat opens once a rider is assigned and the ride is not yet terminal. */}
+            {ride.rider &&
+              (status === "accepted" ||
+                status === "arrived_pickup" ||
+                status === "in_progress" ||
+                status === "completed") && (
+                <View style={styles.chatRow}>
+                  <ChatButton
+                    rideId={ride.rideId}
+                    title={ride.rider.fullName ?? "Your rider"}
+                    label="Message rider"
+                  />
+                </View>
+              )}
             {ride.riderRating != null && (
               <Row
                 label="Your rating"
@@ -609,4 +624,5 @@ const styles = StyleSheet.create({
     borderColor: "#A8D9B8",
   },
   paidChipText: { color: "#087C35", fontSize: 12, fontWeight: "800" },
+  chatRow: { marginTop: 12 },
 });

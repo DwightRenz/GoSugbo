@@ -27,6 +27,7 @@ import {
 } from "@/services/riderService";
 import LogoutButton from "./logout-button";
 import RiderAvatar from "./rider-avatar";
+import ChatButton from "./chat-button"; // NEW
 
 const ink = "#621B28";
 const images = {
@@ -126,6 +127,14 @@ const NEXT_ACTION: Record<
   in_progress: { label: "Complete trip", status: "completed" },
 };
 
+// NEW — statuses during which the customer and rider can chat.
+const CHAT_ENABLED: ReadonlyArray<string> = [
+  "accepted",
+  "arrived_pickup",
+  "in_progress",
+  "completed",
+];
+
 export default function RiderHomeScreen() {
   const { user } = useAuth();
   const { stats, loading, refreshing, refresh } = useRiderStats();
@@ -134,7 +143,6 @@ export default function RiderHomeScreen() {
   const [panel, setPanel] = useState<string | null>(null);
   const [available, setAvailable] = useState(true);
 
-  // NEW — profile picture state, kept in sync with the backend profile
   const [profileImage, setProfileImage] = useState<string | null>(
     user?.profileImage ?? null,
   );
@@ -148,7 +156,6 @@ export default function RiderHomeScreen() {
     active.ride?.status ?? null,
   );
 
-  // Sync availability + profile picture from the backend on mount.
   useEffect(() => {
     let alive = true;
     fetchMyRiderProfile()
@@ -220,7 +227,6 @@ export default function RiderHomeScreen() {
     active.refresh();
   }
 
-  // NEW — pick & upload a new avatar.
   async function onChangeAvatar() {
     if (uploadingAvatar) return;
 
@@ -260,7 +266,6 @@ export default function RiderHomeScreen() {
     }
   }
 
-  // ----- Card content -----
   const activeRide = active.ride;
   const availableRide = board.ride;
   const action = activeRide ? NEXT_ACTION[activeRide.status] : null;
@@ -295,6 +300,8 @@ export default function RiderHomeScreen() {
 
   const showAccept = !activeRide && !!availableRide;
   const showAdvance = !!activeRide && !!action;
+  // NEW — chat is available on an assigned ride, from accepted to completed.
+  const showChat = !!activeRide && CHAT_ENABLED.includes(activeRide.status);
   const busy = active.updating || board.accepting;
 
   const tripsValue = loading ? "…" : String(stats?.todayTrips ?? 0);
@@ -472,6 +479,17 @@ export default function RiderHomeScreen() {
                 </Text>
               }
             </View>
+
+            {/* NEW — chat entry for an assigned ride. Sits above Accept/Advance. */}
+            {showChat && activeRide && (
+              <View style={s.chatRow}>
+                <ChatButton
+                  rideId={activeRide.rideId}
+                  title={activeRide.customer?.fullName ?? "Customer"}
+                  label="Message customer"
+                />
+              </View>
+            )}
 
             {showAccept && (
               <Pressable
@@ -835,6 +853,13 @@ const s = StyleSheet.create({
   },
   acceptText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
   offlineNote: { fontSize: 11, color: "#8B766B", marginTop: 8 },
+  // NEW
+  chatRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 2,
+  },
   disabled: { opacity: 0.4 },
   pressed: { opacity: 0.75 },
   demo: { fontSize: 10, textAlign: "center", color: "#9A8175", marginTop: 14 },
