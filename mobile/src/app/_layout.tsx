@@ -28,6 +28,7 @@ function RootNavigator() {
       <Stack.Protected guard={isAuthenticated}>
         <Stack.Screen name="home" />
         <Stack.Screen name="chat" />
+        <Stack.Screen name="call" />
       </Stack.Protected>
 
       {/* Signed-in: customer-only screens */}

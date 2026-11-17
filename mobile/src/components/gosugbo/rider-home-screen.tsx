@@ -20,6 +20,7 @@ import { useRiderStats } from "@/hooks/use-rider-stats";
 import { useAvailableRides } from "@/hooks/use-available-rides";
 import { useActiveRide } from "@/hooks/use-active-ride";
 import { useRiderLocationPush } from "@/hooks/use-rider-location-push";
+import CallButton from "./call-button"; // NEW
 import {
   fetchMyRiderProfile,
   setAvailability,
@@ -488,6 +489,11 @@ export default function RiderHomeScreen() {
                   title={activeRide.customer?.fullName ?? "Customer"}
                   label="Message customer"
                 />
+                <CallButton
+                  rideId={activeRide.rideId}
+                  title={activeRide.customer?.fullName ?? "Customer"}
+                  label="Call customer"
+                />
               </View>
             )}
 
@@ -858,6 +864,7 @@ const s = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     justifyContent: "flex-end",
+    gap: 10, // NEW
     marginTop: 2,
   },
   disabled: { opacity: 0.4 },

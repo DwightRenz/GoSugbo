@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "@/components/gosugbo/back-arrow";
 import { useAuth } from "@/context/AuthContext";
@@ -92,37 +92,9 @@ export default function ChatScreen() {
   // into /chat with no rideId, we silently return to Home rather than
   // showing a dead-end error. Chat must always come from a ChatButton push.
   if (rideId == null) {
-    setTimeout(() => {
-      if (router.canGoBack()) router.back();
-      else router.replace("/home");
-    }, 0);
-
-    return (
-      <SafeAreaView style={styles.screen} edges={["top"]}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Pressable
-              onPress={goHome}
-              accessibilityRole="button"
-              accessibilityLabel="Go back"
-              style={styles.headerButton}>
-              <BackArrow />
-            </Pressable>
-            <View style={styles.headerCenter}>
-              <Text style={styles.headerTitle}>Chat</Text>
-            </View>
-            <View style={styles.headerButton} />
-          </View>
-
-          <View style={styles.center}>
-            <ActivityIndicator color="#4C1C24" />
-            <Text style={styles.centerText}>Returning to Home…</Text>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
+    console.log("CHAT opened without rideId", JSON.stringify(params));
+    return <Redirect href="/home" />;
   }
-
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
       <KeyboardAvoidingView
@@ -338,3 +310,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
+
+

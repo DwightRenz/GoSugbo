@@ -48,7 +48,8 @@
         {
           "locationWhenInUsePermission": "GoSugbo uses your location to show customers where their rider is."
         }
-      ]
+      ],
+      "@config-plugins/react-native-webrtc"
     ],
     "experiments": {
       "typedRoutes": true,

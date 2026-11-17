@@ -29,6 +29,7 @@ import {
 import { useRideTracking } from "@/hooks/use-ride-tracking";
 import type { Ride, RideStatus, RideStatusHistoryEntry } from "@/types/ride";
 import ChatButton from "@/components/gosugbo/chat-button";
+import CallButton from "@/components/gosugbo/call-button";
 
 const STATUS_LABEL: Record<RideStatus, string> = {
   requested: "Looking for a rider…",
@@ -42,9 +43,16 @@ const STATUS_LABEL: Record<RideStatus, string> = {
 
 const POLL_MS = 3000;
 
+function parseId(raw: string | string[] | undefined): number | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export default function RideTrackingScreen() {
-  const params = useLocalSearchParams<{ rideId?: string }>();
-  const rideId = params.rideId ? Number(params.rideId) : null;
+  const params = useLocalSearchParams<{ rideId?: string | string[] }>();
+  const rideId = parseId(params.rideId);
 
   const [ride, setRide] = useState<Ride | null>(null);
   const [history, setHistory] = useState<RideStatusHistoryEntry[]>([]);
@@ -383,13 +391,17 @@ export default function RideTrackingScreen() {
             {ride.rider &&
               (status === "accepted" ||
                 status === "arrived_pickup" ||
-                status === "in_progress" ||
-                status === "completed") && (
+                status === "in_progress") && (
                 <View style={styles.chatRow}>
                   <ChatButton
                     rideId={ride.rideId}
                     title={ride.rider.fullName ?? "Your rider"}
                     label="Message rider"
+                  />
+                  <CallButton
+                    rideId={ride.rideId}
+                    title={ride.rider.fullName ?? "Your rider"}
+                    label="Call rider"
                   />
                 </View>
               )}
@@ -624,5 +636,6 @@ const styles = StyleSheet.create({
     borderColor: "#A8D9B8",
   },
   paidChipText: { color: "#087C35", fontSize: 12, fontWeight: "800" },
-  chatRow: { marginTop: 12 },
+  chatRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 });
+
