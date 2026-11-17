@@ -1,3 +1,11 @@
+import { NativeModules } from "react-native";
+
+export type IceServer = {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+};
+
 export type RtcPeer = {
   createOffer: () => Promise<{ type: "offer"; sdp: string }>;
   createAnswer: () => Promise<{ type: "answer"; sdp: string }>;
@@ -7,12 +15,19 @@ export type RtcPeer = {
   ) => Promise<void>;
   addIceCandidate: (candidate: Record<string, unknown>) => Promise<void>;
   onIceCandidate: (cb: (c: Record<string, unknown>) => void) => void;
+  onConnectionState: (cb: (state: string) => void) => void;
   close: () => void;
 };
 
+export type LocalMedia = {
+  stream: any;
+  setMuted: (muted: boolean) => void;
+  stop: () => void;
+};
+
 export type RtcRuntime = {
-  createPeer: (iceServers: { urls: string }[]) => RtcPeer;
-  getUserMedia: () => Promise<{ stop: () => void }>;
+  createPeer: (iceServers: IceServer[], localStream?: any) => RtcPeer;
+  getUserMedia: () => Promise<LocalMedia>;
 };
 
 let cached: RtcRuntime | null | undefined;
@@ -39,11 +54,25 @@ export function loadWebRtc(): RtcRuntime | null {
         audio: true,
         video: false,
       });
-      return { stop: () => stream.getTracks().forEach((t: any) => t.stop()) };
+      return {
+        stream,
+        setMuted: (muted: boolean) =>
+          stream.getAudioTracks().forEach((t: any) => {
+            t.enabled = !muted;
+          }),
+        stop: () => stream.getTracks().forEach((t: any) => t.stop()),
+      };
     },
-    createPeer(iceServers) {
+    createPeer(iceServers, localStream) {
       const pc = new RTCPeerConnection({ iceServers });
       let iceCb: ((c: Record<string, unknown>) => void) | null = null;
+      let stateCb: ((s: string) => void) | null = null;
+
+      if (localStream) {
+        localStream
+          .getTracks()
+          .forEach((t: any) => pc.addTrack(t, localStream));
+      }
 
       pc.onicecandidate = (e: any) => {
         if (e.candidate && iceCb) {
@@ -55,9 +84,13 @@ export function loadWebRtc(): RtcRuntime | null {
         }
       };
 
+      pc.oniceconnectionstatechange = () => {
+        stateCb?.(pc.iceConnectionState);
+      };
+
       return {
         async createOffer() {
-          const offer = await pc.createOffer();
+          const offer = await pc.createOffer({ offerToReceiveAudio: true });
           await pc.setLocalDescription(offer);
           return { type: "offer", sdp: offer.sdp };
         },
@@ -77,6 +110,9 @@ export function loadWebRtc(): RtcRuntime | null {
         onIceCandidate(cb) {
           iceCb = cb;
         },
+        onConnectionState(cb) {
+          stateCb = cb;
+        },
         close() {
           pc.close();
         },
@@ -87,6 +123,10 @@ export function loadWebRtc(): RtcRuntime | null {
 }
 
 function safeRequire(): any {
+  // In Expo Go the native module does not exist, and importing the package
+  // throws an uncatchable redbox ("WebRTC native module not found").
+  // Check for the native side first so we fall back to signaling-only.
+  if (!NativeModules.WebRTCModule) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require("react-native-webrtc");

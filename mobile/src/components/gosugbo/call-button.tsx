@@ -7,7 +7,7 @@ type Props = {
   label?: string;
 };
 
-/** Mirrors ChatButton. Pushes the full-screen call screen with rideId + peer name. */
+/** Opens the call screen as the caller (mode=outgoing). */
 export default function CallButton({
   rideId,
   title = "Call",
@@ -18,7 +18,7 @@ export default function CallButton({
       onPress={() =>
         router.push({
           pathname: "/call",
-          params: { rideId: String(rideId), title },
+          params: { rideId: String(rideId), title, mode: "outgoing" },
         })
       }
       accessibilityRole="button"

@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { CallProvider } from "@/context/CallContext";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -64,7 +65,11 @@ export default function RootLayout() {
       <ThemeProvider value={DefaultTheme}>
         <StatusBar style="dark" />
         <AuthProvider>
-          <RootNavigator />
+          {/* Must sit inside AuthProvider (needs the user) and above the
+              navigator so call state survives screen changes. */}
+          <CallProvider>
+            <RootNavigator />
+          </CallProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

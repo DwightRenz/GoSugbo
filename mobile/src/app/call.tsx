@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,7 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BackArrow from "@/components/gosugbo/back-arrow";
 import { useAuth } from "@/context/AuthContext";
 import { useCall } from "@/hooks/use-call";
-import { useActiveRide } from "@/hooks/use-active-ride";
+import { fetchRide } from "@/services/rideService";
 
 function parseId(raw: string | string[] | undefined): number | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
@@ -20,28 +20,76 @@ function parseId(raw: string | string[] | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function firstParam(raw: string | string[] | undefined): string | undefined {
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
 export default function CallScreen() {
   const params = useLocalSearchParams<{
     rideId?: string | string[];
     title?: string | string[];
+    mode?: string | string[];
   }>();
   const rideId = parseId(params.rideId);
-  const title = Array.isArray(params.title) ? params.title[0] : params.title;
+  const title = firstParam(params.title);
+  // "incoming": opened by the provider because someone is calling us.
+  // "outgoing": opened by CallButton, so we place the call.
+  const mode = firstParam(params.mode) === "incoming" ? "incoming" : "outgoing";
 
   const { user } = useAuth();
   const isRider = user?.role === "rider";
-  const active = useActiveRide(isRider);
   const call = useCall(rideId);
+  const [peerName, setPeerName] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
-  // Caller auto-starts on mount. Callee waits for an incoming ringing signal.
+  // Tell the provider this screen is open so it does not push a second one.
   useEffect(() => {
-    if (rideId == null || call.phase !== "idle") return;
-    // If there's an active incoming session already, do nothing; the hook's
-    // signal handler has already switched phase to "ringing".
-    if (call.session) return;
-    void call.start(rideId, title ?? "the other party");
+    call.setCallScreenOpen(true);
+    return () => call.setCallScreenOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rideId]);
+  }, []);
+
+  // Hang up / decline if the user leaves the screen mid-call.
+  useEffect(() => {
+    return () => {
+      void call.leave();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Look up the other person's name.
+  useEffect(() => {
+    if (rideId == null) return;
+    let active = true;
+    fetchRide(rideId)
+      .then((ride) => {
+        if (!active) return;
+        setPeerName(
+          (isRider ? ride.customer?.fullName : ride.rider?.fullName) ?? null,
+        );
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [rideId, isRider]);
+
+  // Only the caller auto-starts. The callee waits for the incoming ringing
+  // signal, so opening this screen never triggers a counter-call.
+  useEffect(() => {
+    if (rideId == null || mode !== "outgoing" || startedRef.current) return;
+    startedRef.current = true;
+    void call.start(rideId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rideId, mode]);
+
+  // Opened as "incoming" but the call is already gone: don't spin forever.
+  useEffect(() => {
+    if (mode !== "incoming" || call.phase !== "idle") return;
+    const t = setTimeout(goBack, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, call.phase]);
 
   function goBack() {
     if (router.canGoBack()) router.back();
@@ -49,28 +97,35 @@ export default function CallScreen() {
   }
 
   if (rideId == null) {
-    console.log("CALL opened without rideId", JSON.stringify(params));
     return <Redirect href="/home" />;
   }
+
   const heading =
     call.phase === "calling" ? "Calling…"
     : call.phase === "ringing" ? "Incoming call"
     : call.phase === "active" ? "In call"
     : call.phase === "ended" ? "Call ended"
+    : mode === "incoming" ? "Connecting…"
     : "Voice call";
 
-  const otherParty =
-    title ??
-    (isRider ?
-      active.ride?.customer?.fullName
-    : active.ride?.rider?.fullName) ??
-    "the other party";
+  const otherParty = title ?? peerName ?? "the other party";
+  const initials =
+    otherParty
+      .split(" ")
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?";
 
   return (
     <SafeAreaView style={s.screen} edges={["top"]}>
       <View style={s.container}>
         <View style={s.header}>
-          <Pressable onPress={goBack} style={s.headerButton}>
+          <Pressable
+            onPress={goBack}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            style={s.headerButton}>
             <BackArrow />
           </Pressable>
           <Text style={s.headerTitle}>Voice call</Text>
@@ -79,26 +134,19 @@ export default function CallScreen() {
 
         <View style={s.body}>
           <View style={s.avatar}>
-            <Text style={s.avatarText}>
-              {otherParty
-                .split(" ")
-                .map((p) => p[0])
-                .slice(0, 2)
-                .join("")
-                .toUpperCase()}
-            </Text>
+            <Text style={s.avatarText}>{initials}</Text>
           </View>
           <Text style={s.name}>{otherParty}</Text>
           <Text style={s.status}>{heading}</Text>
           {!call.mediaSupported && (
             <Text style={s.note}>
-              Voice media requires a dev-client rebuild with
-              react-native-webrtc. Signaling is live.
+              Voice audio needs a development build with react-native-webrtc
+              (not Expo Go). Signaling still works.
             </Text>
           )}
           {call.phase === "active" && (
             <Text style={s.note}>
-              {call.peerConnected ? "Peer connected" : "Connecting…"}
+              {call.peerConnected ? "Peer connected" : "Connecting audio…"}
             </Text>
           )}
           {!!call.error && <Text style={s.error}>{call.error}</Text>}
@@ -108,6 +156,7 @@ export default function CallScreen() {
           {call.phase === "ringing" && (
             <>
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   void call.reject().finally(goBack);
                 }}
@@ -115,6 +164,7 @@ export default function CallScreen() {
                 <Text style={s.roundText}>Decline</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 onPress={() => void call.accept()}
                 style={[s.round, s.accept]}>
                 <Text style={s.roundText}>Accept</Text>
@@ -125,13 +175,17 @@ export default function CallScreen() {
           {(call.phase === "calling" || call.phase === "active") && (
             <>
               {call.phase === "active" && (
-                <Pressable onPress={call.toggleMute} style={[s.round, s.mute]}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={call.toggleMute}
+                  style={[s.round, s.mute]}>
                   <Text style={s.roundText}>
                     {call.muted ? "Unmute" : "Mute"}
                   </Text>
                 </Pressable>
               )}
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   void call.hangup().finally(goBack);
                 }}
@@ -144,7 +198,10 @@ export default function CallScreen() {
           )}
 
           {call.phase === "ended" && (
-            <Pressable onPress={goBack} style={[s.round, s.accept]}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={goBack}
+              style={[s.round, s.accept]}>
               <Text style={s.roundText}>Close</Text>
             </Pressable>
           )}
@@ -216,16 +273,4 @@ const s = StyleSheet.create({
   decline: { backgroundColor: "#A92D36" },
   mute: { backgroundColor: "#4C1C24" },
   roundText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  secondaryBtn: {
-    minHeight: 44,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: "#4C1C24",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 });
-
-

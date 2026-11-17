@@ -5,14 +5,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
-  Keyboard,
- TextInput,
 } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -31,32 +31,15 @@ export type Coordinates = { latitude: number; longitude: number };
 type LocationType = "pickup" | "destination";
 type PaymentChoice = "cod" | "online";
 
-const FALLBACK_TYPES = [
-  {
-    id: "motorbike",
-    title: "Motorbike",
-    description: "1 passenger · Motorcycle ride",
-    summary: "1 passenger · Helmet provided",
-    rideTypeId: null as number | null,
-    icon: require("../../../assets/home/Motorcycle.png") as number,
-  },
-  {
-    id: "tricycle4",
-    title: "Tricycle — 4 Seaters",
-    description: "Up to 4 passengers",
-    summary: "Up to 4 passengers",
-    rideTypeId: null as number | null,
-    icon: require("../../../assets/home/tricycle-4.png") as number,
-  },
-  {
-    id: "tricycle6",
-    title: "Tricycle — 6 Seaters",
-    description: "Up to 6 passengers",
-    summary: "Up to 6 passengers",
-    rideTypeId: null as number | null,
-    icon: require("../../../assets/home/tricycle-6.png") as number,
-  },
-];
+// The latest fare lookup, tagged with the inputs it was made for so a stale
+// result is never shown for different locations or ride types.
+type EstimateResult = {
+  key: string;
+  data: FareEstimate | null;
+  error: string;
+};
+
+const DEFAULT_COORDS: Coordinates = { latitude: 9.94, longitude: 123.4 };
 
 function iconKeyForRideType(
   name: string,
@@ -115,101 +98,123 @@ function buildAddressFields(
 }
 
 export default function BookRideScreen() {
-
-async function searchPlace() {
-  const query = searchText.trim();
-  if (!query || searching) return;
-
-  Keyboard.dismiss();
-  setSearching(true);
-  setSearchError("");
-
-  try {
-    // Android requires location permission for geocoding.
-    const permission =
-      await Location.requestForegroundPermissionsAsync();
-
-    if (permission.status !== "granted") {
-      setSearchError(
-        "Allow location access to search, or choose a spot on the map.",
-      );
-      return;
-    }
-
-    // Include the city/province in the input for better results.
-    // Example: "Panagsama Beach, Moalboal, Cebu"
-    const results = await Location.geocodeAsync(query);
-    const place = results[0];
-
-    if (!place) {
-      setSearchError(
-        "No location found. Try adding the city or province.",
-      );
-      return;
-    }
-
-    const coordinates = {
-      latitude: place.latitude,
-      longitude: place.longitude,
-    };
-
-    pickerCenter.current = coordinates;
-
-    pickerMapRef.current?.animateToRegion(
-      {
-        ...coordinates,
-        latitudeDelta: 0.008,
-        longitudeDelta: 0.008,
-      },
-      400,
-    );
-  } catch {
-    setSearchError(
-      "Could not search right now. Try again or drag the map.",
-    );
-  } finally {
-    setSearching(false);
-  }
-}
   const [pickup, setPickup] = useState("");
   const [pickupCoords, setPickupCoords] = useState<Coordinates | null>(null);
   const [destination, setDestination] = useState("");
   const [destinationCoords, setDestinationCoords] =
     useState<Coordinates | null>(null);
   const [locationError, setLocationError] = useState("");
-  const pickerMapRef = useRef<MapView>(null);
-const [searchText, setSearchText] = useState("");
-const [searching, setSearching] = useState(false);
-const [searchError, setSearchError] = useState("");
+
+  // Search inside the map picker
+  const [searchText, setSearchText] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  // Delay mounting the modal map slightly; MapView inside a Modal on Android
+  // can render black if it mounts before the Modal finishes laying out.
+  const [pickerMapReady, setPickerMapReady] = useState(false);
   const [selecting, setSelecting] = useState<LocationType>("destination");
-  const [pickerInitial, setPickerInitial] = useState<Coordinates>({
-    latitude: 9.94,
-    longitude: 123.4,
-  });
-  const pickerCenter = useRef<Coordinates>({
-    latitude: 9.94,
-    longitude: 123.4,
-  });
+  const [pickerInitial, setPickerInitial] =
+    useState<Coordinates>(DEFAULT_COORDS);
+  const pickerCenter = useRef<Coordinates>(DEFAULT_COORDS);
   const mapRef = useRef<MapView>(null);
+  const pickerMapRef = useRef<MapView>(null);
   const lookupVersion = useRef({ pickup: 0, destination: 0 });
 
-  const [rideTypes, setRideTypes] = useState<FareEstimate[] | null>(null);
   const [backendTypes, setBackendTypes] = useState<RideType[] | null>(null);
   const [typesError, setTypesError] = useState("");
   const [selectedRideTypeId, setSelectedRideTypeId] = useState<number | null>(
     null,
   );
 
-  const [estimate, setEstimate] = useState<FareEstimate | null>(null);
-  const [estimating, setEstimating] = useState(false);
-  const [estimateError, setEstimateError] = useState("");
+  const [estimateResult, setEstimateResult] = useState<EstimateResult | null>(
+    null,
+  );
 
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentChoice>("cod");
+
+  // Identifies the current fare inputs. While the stored result's key differs
+  // from this, a lookup is in flight (so "estimating" is derived, not state).
+  const estimateKey =
+    pickupCoords && destinationCoords && selectedRideTypeId != null ?
+      [
+        selectedRideTypeId,
+        pickupCoords.latitude,
+        pickupCoords.longitude,
+        destinationCoords.latitude,
+        destinationCoords.longitude,
+      ].join(":")
+    : null;
+  const currentResult =
+    estimateResult && estimateResult.key === estimateKey ?
+      estimateResult
+    : null;
+  const estimate = currentResult?.data ?? null;
+  const estimateError = currentResult?.error ?? "";
+  const estimating = estimateKey != null && currentResult == null;
+
+  async function searchPlace() {
+    const query = searchText.trim();
+    if (!query || searching) return;
+
+    Keyboard.dismiss();
+    setSearching(true);
+    setSearchError("");
+
+    try {
+      // Android requires location permission for geocoding.
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        setSearchError(
+          "Allow location access to search, or choose a spot on the map.",
+        );
+        return;
+      }
+
+      // Include the city/province in the input for better results.
+      // Example: "Panagsama Beach, Moalboal, Cebu"
+      const results = await Location.geocodeAsync(query);
+      const place = results[0];
+
+      if (!place) {
+        setSearchError("No location found. Try adding the city or province.");
+        return;
+      }
+
+      const coordinates = {
+        latitude: place.latitude,
+        longitude: place.longitude,
+      };
+
+      pickerCenter.current = coordinates;
+
+      pickerMapRef.current?.animateToRegion(
+        {
+          ...coordinates,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        400,
+      );
+    } catch {
+      setSearchError("Could not search right now. Try again or drag the map.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  // Mount the picker map shortly after the modal opens. The flag is reset in
+  // openMapPicker, so this effect never sets state synchronously.
+  useEffect(() => {
+    if (!mapPickerOpen) return;
+    const t = setTimeout(() => setPickerMapReady(true), 250);
+    return () => clearTimeout(t);
+  }, [mapPickerOpen]);
 
   useEffect(() => {
     let active = true;
@@ -229,7 +234,6 @@ const [searchError, setSearchError] = useState("");
             e.displayMessage
           : "Could not load ride types.";
         setTypesError(message);
-        console.log("[ride-types] fetch failed:", e);
       }
     })();
     return () => {
@@ -335,8 +339,15 @@ const [searchError, setSearchError] = useState("");
     }
   }, [pickupCoords, destinationCoords]);
 
+  // Fetch the fare whenever the locations or ride type change. State is only
+  // set from the async callbacks, never synchronously in the effect body.
   useEffect(() => {
-    if (!pickupCoords || !destinationCoords || selectedRideTypeId == null) {
+    if (
+      estimateKey == null ||
+      !pickupCoords ||
+      !destinationCoords ||
+      selectedRideTypeId == null
+    ) {
       return;
     }
 
@@ -351,23 +362,24 @@ const [searchError, setSearchError] = useState("");
     })
       .then((res) => {
         if (!active) return;
-        setEstimate(res);
-        setEstimateError("");
+        setEstimateResult({ key: estimateKey, data: res, error: "" });
       })
       .catch((e) => {
         if (!active) return;
-        setEstimate(null);
-        setEstimateError(
-          e instanceof ApiError ?
-            e.displayMessage
-          : "Could not calculate fare right now.",
-        );
+        setEstimateResult({
+          key: estimateKey,
+          data: null,
+          error:
+            e instanceof ApiError ?
+              e.displayMessage
+            : "Could not calculate fare right now.",
+        });
       });
 
     return () => {
       active = false;
     };
-  }, [pickupCoords, destinationCoords, selectedRideTypeId]);
+  }, [estimateKey, pickupCoords, destinationCoords, selectedRideTypeId]);
 
   const selectedBackendType = useMemo(() => {
     if (!backendTypes || selectedRideTypeId == null) return null;
@@ -394,14 +406,15 @@ const [searchError, setSearchError] = useState("");
   const displayMinutes = estimate?.estimatedDurationMin ?? null;
 
   function openMapPicker(type: LocationType) {
-      setSearchText("");
+    setSearchText("");
     setSearchError("");
     setSelecting(type);
-    pickerCenter.current = (type === "pickup" ? pickupCoords : (
-      destinationCoords
-    )) ??
-      pickupCoords ?? { latitude: 9.94, longitude: 123.4 };
+    pickerCenter.current =
+      (type === "pickup" ? pickupCoords : destinationCoords) ??
+      pickupCoords ??
+      DEFAULT_COORDS;
     setPickerInitial(pickerCenter.current);
+    setPickerMapReady(false);
     setMapPickerOpen(true);
   }
 
@@ -572,7 +585,7 @@ const [searchError, setSearchError] = useState("");
               ref={mapRef}
               style={StyleSheet.absoluteFill}
               initialRegion={{
-                ...(pickupCoords ?? { latitude: 9.94, longitude: 123.4 }),
+                ...(pickupCoords ?? DEFAULT_COORDS),
                 latitudeDelta: 0.01,
                 longitudeDelta: 0.01,
               }}
@@ -588,9 +601,6 @@ const [searchError, setSearchError] = useState("");
                   description={pickup}
                   pinColor="#7D1E2B"
                   stopPropagation
-                  onDragEnd={(event) =>
-                    void updateLocation("pickup", event.nativeEvent.coordinate)
-                  }
                 />
               )}
               {destinationCoords && (
@@ -600,12 +610,6 @@ const [searchError, setSearchError] = useState("");
                   description={destination}
                   pinColor="#26734D"
                   stopPropagation
-                  onDragEnd={(event) =>
-                    void updateLocation(
-                      "destination",
-                      event.nativeEvent.coordinate,
-                    )
-                  }
                 />
               )}
             </MapView>
@@ -826,12 +830,42 @@ const [searchError, setSearchError] = useState("");
               {selecting === "pickup" ? "Choose pickup" : "Choose destination"}
             </Text>
           </View>
+
+          <View style={styles.searchRow}>
+            <TextInput
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search a place, e.g. Panagsama Beach, Moalboal"
+              placeholderTextColor="#9A857E"
+              returnKeyType="search"
+              onSubmitEditing={() => void searchPlace()}
+              style={styles.searchInput}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search"
+              onPress={() => void searchPlace()}
+              disabled={searching}
+              style={({ pressed }) => [
+                styles.searchButton,
+                (pressed || searching) && styles.pressed,
+              ]}>
+              {searching ?
+                <ActivityIndicator color="#FFFFFF" />
+              : <Text style={styles.searchButtonText}>Search</Text>}
+            </Pressable>
+          </View>
+          {!!searchError && (
+            <Text style={styles.searchError}>{searchError}</Text>
+          )}
+
           <Text style={styles.pickerHint}>
             Move the map to position the pin. Pinch to zoom.
           </Text>
           <View style={styles.pickerMap}>
-            {mapPickerOpen && (
+            {mapPickerOpen && pickerMapReady && (
               <MapView
+                ref={pickerMapRef}
                 style={StyleSheet.absoluteFill}
                 initialRegion={{
                   ...pickerInitial,
@@ -900,12 +934,45 @@ const styles = StyleSheet.create({
     marginTop: 5,
   },
   pickerScreen: { flex: 1, backgroundColor: "#F3E9DB" },
-  pickerMap: { flex: 1 },
+  pickerMap: { flex: 1, backgroundColor: "#D2B48C" },
   pickerHint: {
     paddingHorizontal: 20,
     paddingBottom: 14,
     color: "#88766E",
     fontSize: 13,
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 44,
+    paddingHorizontal: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E3CFB9",
+    borderRadius: 12,
+    color: "#4C1C24",
+    fontSize: 13,
+  },
+  searchButton: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#4C1C24",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchButtonText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
+  searchError: {
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    color: "#A92D36",
+    fontSize: 12,
   },
   pickerFooter: { padding: 20, backgroundColor: "#FFFFFF" },
   centerPin: {

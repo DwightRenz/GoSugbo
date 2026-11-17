@@ -638,4 +638,3 @@ const styles = StyleSheet.create({
   paidChipText: { color: "#087C35", fontSize: 12, fontWeight: "800" },
   chatRow: { marginTop: 12, flexDirection: "row", gap: 10 },
 });
-

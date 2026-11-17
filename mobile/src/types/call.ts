@@ -48,3 +48,15 @@ export type RelaySignalInput = {
   candidate?: Record<string, unknown>;
   reason?: string;
 };
+
+/**
+ * NEW. GET /api/rides/{rideId}/call/active
+ * Lets a callee who wasn't subscribed in time (app on another screen, brief
+ * socket drop) catch up on the ringing call, the stored offer and any ICE
+ * candidates that were already sent. Needs a matching backend endpoint.
+ */
+export type CallSnapshot = {
+  session: CallSession;
+  offer: CallSignal | null;
+  iceCandidates: CallSignal[];
+};
