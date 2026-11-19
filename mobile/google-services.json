@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "732049052323",
+    "project_id": "gosugbo-e469e",
+    "storage_bucket": "gosugbo-e469e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:732049052323:android:a3a3ddcf79542e4403a516",
+        "android_client_info": {
+          "package_name": "com.gosugbo.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "732049052323-meog2tm2elf7m4n20f3bbtn31f302n50.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAwCBYx0HKBoWX2BCj0VM2ycdlaYXDcZRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "732049052323-meog2tm2elf7m4n20f3bbtn31f302n50.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

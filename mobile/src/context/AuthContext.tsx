@@ -18,6 +18,10 @@ import type {
   RegisterRiderInput,
   User,
 } from "@/types/auth";
+import {
+  unregisterDeviceToken,
+  getFcmToken,
+} from "@/services/notificationService";
 
 type AuthContextValue = {
   user: User | null;
@@ -25,7 +29,10 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   register: (input: RegisterCustomerInput) => Promise<User>;
   registerRider: (input: RegisterRiderInput) => Promise<User>;
-  login: (input: LoginInput, previewRole?: "customer" | "rider") => Promise<User>;
+  login: (
+    input: LoginInput,
+    previewRole?: "customer" | "rider",
+  ) => Promise<User>;
   verifyTestOtp: (code: string) => void;
   loginWithGoogle: () => Promise<User | null>;
   logout: () => Promise<void>;
@@ -127,7 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(
-    async (input: LoginInput, previewRole: "customer" | "rider" = "customer") => {
+    async (
+      input: LoginInput,
+      previewRole: "customer" | "rider" = "customer",
+    ) => {
       const email = input.email.trim().toLowerCase();
 
       if (__DEV__ && email === "test@gmail.com") {
@@ -167,7 +177,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      await authService.logoutRequest(); // revokes the token on the server
+      const token = await getFcmToken();
+      if (token) await unregisterDeviceToken(token);
+    } catch {
+      // non-fatal
+    }
+    try {
+      await authService.logoutRequest();
     } catch {
       // still sign out locally
     }

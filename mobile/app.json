@@ -12,10 +12,17 @@
       "bundleIdentifier": "com.gosugbo.mobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "googleServicesFile": "./ios/GoogleService-Info.plist"
     },
-    "android": {
+      "android": {
       "package": "com.gosugbo.mobile",
+      "googleServicesFile": "./google-services.json", 
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCFhHUPQtGqLSLsuq3R8NLKqlqTkOYQ0QI"
+        }
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -25,7 +32,8 @@
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -47,6 +55,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "GoSugbo uses your location to show customers where their rider is."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#4C1C24",
+          "sounds": []
         }
       ],
       "@config-plugins/react-native-webrtc"

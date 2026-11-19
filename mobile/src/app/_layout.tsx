@@ -5,12 +5,15 @@ import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { CallProvider } from "@/context/CallContext";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 void SplashScreen.preventAutoHideAsync();
 
 function RootNavigator() {
   const { isAuthenticated, loading, user } = useAuth();
   const isRider = user?.role === "rider";
+
+  usePushNotifications();
 
   useEffect(() => {
     if (!loading) void SplashScreen.hideAsync();
